@@ -15,15 +15,16 @@ Internship: **starts Monday, 13 July 2026 · Monday–Saturday**.
 ## Deploy to Vercel
 
 1. Push this repository to GitHub (already done if you're reading this there).
-2. Go to [vercel.com/new](https://vercel.com/new) and import the repository. Vercel auto-detects Next.js — no build settings needed.
-3. Add one environment variable: `ANTHROPIC_API_KEY` (get a key at [platform.claude.com](https://platform.claude.com/)).
-4. Deploy.
+2. Get a **free** Gemini API key (no credit card needed) at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+3. Go to [vercel.com/new](https://vercel.com/new) and import the repository. Vercel auto-detects Next.js — no build settings needed.
+4. Add one environment variable: `GEMINI_API_KEY`.
+5. Deploy.
 
 ## Run locally
 
 ```bash
 npm install
-cp .env.example .env.local   # then paste your ANTHROPIC_API_KEY
+cp .env.example .env.local   # then paste your GEMINI_API_KEY
 npm run dev
 ```
 
@@ -31,4 +32,4 @@ Open http://localhost:3000.
 
 ## Tech
 
-Next.js 15 (App Router) · TypeScript · Tailwind CSS · Anthropic SDK (Claude Opus 4.8, streaming) · Mermaid · react-markdown
+Next.js 15 (App Router) · TypeScript · Tailwind CSS · Google Gemini API (`gemini-2.5-flash`, free tier, streaming) · Mermaid · react-markdown

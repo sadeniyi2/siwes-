@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.109.1",
+    "@google/genai": "^2.10.0",
     "mermaid": "^11.4.1",
     "next": "^15.1.6",
     "react": "^19.0.0",

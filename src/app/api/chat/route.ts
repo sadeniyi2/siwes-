@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { NextRequest } from "next/server";
 import { buildSystemPrompt } from "@/lib/prompt";
 import type { ChatRequestBody } from "@/lib/types";
@@ -6,10 +6,14 @@ import type { ChatRequestBody } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+// gemini-2.5-flash is on the Gemini API free tier; override via env if needed.
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
 export async function POST(req: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
     return new Response(
-      "ANTHROPIC_API_KEY is not set. Add it in your Vercel project settings (or .env.local for local dev).",
+      "GEMINI_API_KEY is not set. Get a free key at https://aistudio.google.com/apikey and add it in your Vercel project settings (or .env.local for local dev).",
       { status: 500 },
     );
   }
@@ -25,54 +29,57 @@ export async function POST(req: NextRequest) {
     return new Response("messages is required", { status: 400 });
   }
 
-  const client = new Anthropic();
+  const ai = new GoogleGenAI({ apiKey });
   const todayISO = new Date().toISOString().slice(0, 10);
 
-  // Volatile per-request context (memory, date) goes into the first user turn
-  // so the system prompt stays byte-stable for prompt caching.
-  const history: Anthropic.MessageParam[] = body.messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
-  const first = history[0];
-  history[0] = {
-    role: "user",
-    content: `<internship_memory>\n${body.memory || "No entries saved yet."}\n</internship_memory>\n\n${
-      first.role === "user" ? first.content : ""
-    }`,
-  };
-  if (first.role !== "user") history.splice(1, 0, first);
-
-  const stream = client.messages.stream({
-    model: "claude-opus-4-8",
-    max_tokens: 32000,
-    thinking: { type: "adaptive" },
-    system: [
+  // Per-request context (saved-entry memory) rides on the first user turn.
+  const contents = body.messages.map((m, i) => ({
+    role: m.role === "assistant" ? ("model" as const) : ("user" as const),
+    parts: [
       {
-        type: "text",
-        text: buildSystemPrompt(todayISO),
-        cache_control: { type: "ephemeral" },
+        text:
+          i === 0 && m.role === "user"
+            ? `<internship_memory>\n${body.memory || "No entries saved yet."}\n</internship_memory>\n\n${m.content}`
+            : m.content,
       },
     ],
-    messages: history,
-  });
+  }));
+  if (contents[0]?.role !== "user") {
+    contents.unshift({
+      role: "user",
+      parts: [
+        {
+          text: `<internship_memory>\n${body.memory || "No entries saved yet."}\n</internship_memory>`,
+        },
+      ],
+    });
+  }
 
   const encoder = new TextEncoder();
   const readable = new ReadableStream<Uint8Array>({
-    start(controller) {
-      stream.on("text", (delta) => {
-        controller.enqueue(encoder.encode(delta));
-      });
-      stream.on("error", (err) => {
+    async start(controller) {
+      try {
+        const stream = await ai.models.generateContentStream({
+          model: MODEL,
+          contents,
+          config: {
+            systemInstruction: buildSystemPrompt(todayISO),
+            maxOutputTokens: 16384,
+            temperature: 0.6,
+          },
+        });
+        for await (const chunk of stream) {
+          const text = chunk.text;
+          if (text) controller.enqueue(encoder.encode(text));
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
         controller.enqueue(
-          encoder.encode(`\n\n⚠️ The assistant hit an error: ${err.message}`),
+          encoder.encode(`\n\n⚠️ The assistant hit an error: ${msg}`),
         );
+      } finally {
         controller.close();
-      });
-      stream.on("end", () => controller.close());
-    },
-    cancel() {
-      stream.abort();
+      }
     },
   });
 
