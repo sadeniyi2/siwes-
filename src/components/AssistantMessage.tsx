@@ -128,6 +128,18 @@ export default function AssistantMessage({
                 {seg.entry.text}
               </p>
               {!streaming && (
+                <div
+                  className="word-meter mt-3"
+                  title="Green zone = the 35–70 word logbook target"
+                >
+                  <span className="zone" />
+                  <span
+                    className="fill"
+                    style={{ width: `${Math.min(100, words)}%` }}
+                  />
+                </div>
+              )}
+              {!streaming && (
                 <div className="mt-3 flex items-center gap-2">
                   <button
                     onClick={() => onSaveEntry(seg.entry)}

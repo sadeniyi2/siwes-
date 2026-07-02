@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/", label: "Assistant" },
   { href: "/logbook", label: "Logbook" },
+  { href: "/setup", label: "⚙ Profile" },
 ];
 
 export default function Nav() {
@@ -18,7 +19,7 @@ export default function Nav() {
           <Link
             key={href}
             href={href}
-            className={`rounded-full px-4 py-1.5 font-medium transition-all duration-200 ${
+            className={`rounded-full px-3.5 py-1.5 font-medium transition-all duration-200 ${
               active
                 ? "bg-accent text-white shadow-lift"
                 : "text-ink-soft hover:bg-accent-soft hover:text-accent-dark"

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Fraunces, Instrument_Sans } from "next/font/google";
+import HeaderMeta from "@/components/HeaderMeta";
 import Nav from "@/components/Nav";
 import "./globals.css";
 
@@ -37,9 +38,7 @@ export default function RootLayout({
                 <p className="font-display text-[15px] font-semibold leading-tight tracking-tight">
                   SIWES Logbook Assistant
                 </p>
-                <p className="text-xs leading-tight text-ink-faint">
-                  Mon 13 July 2026 · Mon–Sat
-                </p>
+                <HeaderMeta />
               </div>
             </Link>
             <Nav />
