@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #1c2434;
+  --accent: #2b4eda;
+}
+
+body {
+  background:
+    radial-gradient(1200px 400px at 50% -200px, rgba(43, 78, 218, 0.06), transparent),
+    #f4f1ea;
+}
+
+::selection {
+  background: rgba(43, 78, 218, 0.18);
+}
+
+/* ---------- Buttons & interactive micro-motion ---------- */
+.btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-semibold transition-all duration-200;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn-primary {
+  @apply btn bg-accent px-5 py-3 text-white hover:bg-accent-dark hover:shadow-lift;
+}
+.btn-ghost {
+  @apply btn border border-ink/15 bg-paper-sheet px-4 py-2 text-ink-soft hover:border-accent/50 hover:text-accent-dark hover:shadow-card;
+}
+.chip {
+  @apply inline-flex items-center gap-1 rounded-full border border-ink/10 bg-paper-sheet px-3 py-1.5 text-xs font-medium text-ink-soft transition-all duration-200;
+}
+.chip:hover {
+  @apply border-accent/50 text-accent-dark shadow-card;
+  transform: translateY(-1px);
+}
+
+/* ---------- Typing indicator ---------- */
+.typing-dots span {
+  @apply inline-block h-1.5 w-1.5 rounded-full bg-accent;
+  animation: blink 1.2s infinite ease-in-out;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+/* ---------- Ruled logbook sheet ---------- */
+.sheet-paper {
+  background-color: #fdfcf7;
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 27px,
+    rgba(28, 36, 52, 0.045) 28px
+  );
+}
+.sheet-margin {
+  position: relative;
+}
+.sheet-margin::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2.25rem;
+  width: 1px;
+  background: rgba(224, 101, 107, 0.45);
+}
+
+/* ---------- Markdown rendering inside chat bubbles and reports ---------- */
+.prose-chat h1 { @apply mb-2 mt-4 font-display text-xl font-bold; }
+.prose-chat h2 { @apply mb-2 mt-4 border-b border-ink/10 pb-1 font-display text-lg font-semibold; }
+.prose-chat h3 { @apply mb-1 mt-3 text-base font-semibold; }
+.prose-chat p { @apply mb-2 leading-relaxed; }
+.prose-chat ul { @apply mb-2 list-disc pl-5; }
+.prose-chat ol { @apply mb-2 list-decimal pl-5; }
+.prose-chat li { @apply mb-0.5; }
+.prose-chat table { @apply mb-3 w-full border-collapse text-sm; }
+.prose-chat th, .prose-chat td { @apply border border-ink/20 px-2 py-1 text-left; }
+.prose-chat th { @apply bg-accent-wash font-semibold; }
+.prose-chat code { @apply rounded bg-ink/5 px-1 py-0.5 text-[0.85em]; }
+.prose-chat pre { @apply mb-3 overflow-x-auto rounded-lg bg-ink p-3 text-paper-sheet; }
+.prose-chat pre code { @apply bg-transparent p-0 text-inherit; }
+.prose-chat blockquote { @apply mb-2 border-l-4 border-accent-soft pl-3 italic text-ink-soft; }
+.prose-chat hr { @apply my-3 border-ink/10; }
+.prose-chat a { @apply text-accent underline underline-offset-2; }
+
+/* ---------- Print ---------- */
+@media print {
+  body { background: white; }
+  .print-sheet {
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .sheet-paper { background-image: none; }
+  .sheet-margin::before { display: none; }
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
