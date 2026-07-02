@@ -105,13 +105,13 @@ export default function LogbookPage() {
 
         <div className="ml-auto flex items-center gap-2">
           <span
-            className="chip cursor-default"
+            className="chip cursor-default whitespace-nowrap"
             title="Days filled this week / total saved entries"
           >
-            ✍️ {weekEntryCount}/6 this week · {entries.length} total
+            ✍️ {weekEntryCount}/6 · {entries.length} total
           </span>
-          <button onClick={() => window.print()} className="btn-primary px-4 py-2">
-            🖨 Print
+          <button onClick={() => window.print()} className="btn-primary px-3 py-2 sm:px-4">
+            🖨 <span className="hidden sm:inline">Print</span>
           </button>
         </div>
       </div>
@@ -143,10 +143,12 @@ export default function LogbookPage() {
         })}
       </div>
 
-      {/* The sheet — mirrors the physical SIWES logbook page */}
+      {/* The sheet — mirrors the physical SIWES logbook page.
+          On narrow screens it scrolls horizontally so the table keeps its shape. */}
+      <div className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 print:mx-0 print:overflow-visible print:px-0">
       <div
         key={weekStart}
-        className="print-sheet sheet-paper sheet-margin sheet-seal animate-page-turn relative mx-auto max-w-3xl rounded-lg border border-ink/20 p-8 pl-14 shadow-sheet"
+        className="print-sheet sheet-paper sheet-margin sheet-seal animate-page-turn relative mx-auto min-w-[600px] max-w-3xl rounded-lg border border-ink/20 p-5 pl-12 shadow-sheet sm:min-w-0 sm:p-8 sm:pl-14"
       >
         <div className="mb-6 flex items-baseline justify-between">
           <h1 className="font-display text-lg font-bold tracking-wide">
@@ -269,6 +271,7 @@ export default function LogbookPage() {
             })}
           </tbody>
         </table>
+      </div>
       </div>
 
       <p className="mx-auto mt-4 max-w-3xl text-center text-xs text-ink-faint print:hidden">

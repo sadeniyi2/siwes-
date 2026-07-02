@@ -168,26 +168,31 @@ export default function AssistantPage() {
   }
 
   return (
-    <div className="flex flex-col" style={{ minHeight: "calc(100vh - 8.5rem)" }}>
+    <div
+      className="flex flex-col"
+      style={{ minHeight: "calc(100dvh - 8.5rem)" }}
+    >
       <Toast message={toast} onDone={() => setToast(null)} />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {QUICK_ACTIONS.map((a) => (
-          <button
-            key={a.label}
-            disabled={busy}
-            onClick={() => send(a.label)}
-            className="chip disabled:opacity-50"
-          >
-            <span aria-hidden>{a.icon}</span> {a.label}
-          </button>
-        ))}
+      <div className="mb-3 flex items-center gap-2">
+        <div className="-mx-3 flex flex-1 gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
+          {QUICK_ACTIONS.map((a) => (
+            <button
+              key={a.label}
+              disabled={busy}
+              onClick={() => send(a.label)}
+              className="chip shrink-0 disabled:opacity-50"
+            >
+              <span aria-hidden>{a.icon}</span> {a.label}
+            </button>
+          ))}
+        </div>
         {messages.length > 0 && (
           <button
             onClick={handleClear}
-            className="ml-auto rounded-full px-3 py-1.5 text-xs font-medium text-ink-faint transition-colors hover:text-margin"
+            className="shrink-0 rounded-full px-2 py-1.5 text-xs font-medium text-ink-faint transition-colors hover:text-margin"
           >
-            Clear chat
+            Clear
           </button>
         )}
       </div>
@@ -233,9 +238,9 @@ export default function AssistantPage() {
               </div>
             </div>
           ) : (
-            <div key={i} className="animate-rise flex gap-2.5">
+            <div key={i} className="animate-rise flex gap-2 sm:gap-2.5">
               <AssistantAvatar />
-              <div className="max-w-[92%] flex-1 rounded-2xl rounded-tl-sm border border-ink/5 bg-paper px-4 py-3">
+              <div className="min-w-0 max-w-full flex-1 rounded-2xl rounded-tl-sm border border-ink/5 bg-paper px-3 py-3 sm:px-4">
                 {m.content === "" && busy && isLast ? (
                   <span
                     className="typing-dots flex items-center gap-1 py-1"
@@ -264,7 +269,7 @@ export default function AssistantPage() {
       </div>
 
       <form
-        className="mt-3 flex items-end gap-2"
+        className="mt-3 flex items-end gap-2 pb-[env(safe-area-inset-bottom)]"
         onSubmit={(e) => {
           e.preventDefault();
           send(input);
@@ -284,24 +289,25 @@ export default function AssistantPage() {
             }
           }}
           rows={2}
-          placeholder="Describe your day… (Enter to send, Shift+Enter for a new line)"
-          className="flex-1 resize-none rounded-2xl border border-ink/15 bg-paper-sheet px-4 py-3 text-sm shadow-card outline-none transition-all duration-200 focus:border-accent focus:shadow-glow"
+          placeholder="Describe your day…"
+          className="min-w-0 flex-1 resize-none rounded-2xl border border-ink/15 bg-paper-sheet px-4 py-3 text-base shadow-card outline-none transition-all duration-200 focus:border-accent focus:shadow-glow sm:text-sm"
         />
         {busy ? (
           <button
             type="button"
             onClick={() => abortRef.current?.abort()}
-            className="btn bg-ink/10 px-5 py-3 text-ink-soft hover:bg-ink/20"
+            className="btn shrink-0 bg-ink/10 px-4 py-3 text-ink-soft hover:bg-ink/20 sm:px-5"
           >
-            ■ Stop
+            <span className="hidden sm:inline">■ Stop</span>
+            <span className="sm:hidden">■</span>
           </button>
         ) : (
           <button
             type="submit"
             disabled={!input.trim()}
-            className="btn-primary group disabled:opacity-50 disabled:hover:shadow-none"
+            className="btn-primary group shrink-0 px-4 disabled:opacity-50 disabled:hover:shadow-none sm:px-5"
           >
-            Send{" "}
+            <span className="hidden sm:inline">Send </span>
             <span className="transition-transform duration-200 group-hover:-translate-y-0.5">
               ↑
             </span>
