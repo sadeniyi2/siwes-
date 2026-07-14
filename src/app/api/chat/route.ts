@@ -6,8 +6,9 @@ import type { ChatRequestBody } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-// gemini-2.5-flash is on the Gemini API free tier; override via env if needed.
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+// gemini-2.0-flash is on the Gemini API free tier and available to new keys.
+// Override via the GEMINI_MODEL env var if you want a different model.
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
