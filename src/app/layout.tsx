@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Fraunces, Instrument_Sans } from "next/font/google";
+import HeaderMeta from "@/components/HeaderMeta";
 import Nav from "@/components/Nav";
 import "./globals.css";
 
@@ -28,24 +29,24 @@ export default function RootLayout({
     <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body className="min-h-screen font-sans text-ink antialiased">
         <header className="sticky top-0 z-20 border-b border-ink/10 bg-paper-sheet/90 backdrop-blur print:hidden">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <Link href="/" className="group flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-deep font-display text-lg font-bold text-white shadow-lift transition-transform duration-300 group-hover:-rotate-6">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
+            <Link href="/" className="group flex min-w-0 items-center gap-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-deep font-display text-lg font-bold text-white shadow-lift transition-transform duration-300 group-hover:-rotate-6">
                 S
               </span>
-              <div>
-                <p className="font-display text-[15px] font-semibold leading-tight tracking-tight">
+              <div className="min-w-0">
+                <p className="truncate font-display text-sm font-semibold leading-tight tracking-tight sm:text-[15px]">
                   SIWES Logbook Assistant
                 </p>
-                <p className="text-xs leading-tight text-ink-faint">
-                  Mon 13 July 2026 · Mon–Sat
-                </p>
+                <HeaderMeta />
               </div>
             </Link>
             <Nav />
           </div>
         </header>
-        <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+        <main className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
+          {children}
+        </main>
       </body>
     </html>
   );
