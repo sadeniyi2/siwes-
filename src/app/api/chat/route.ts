@@ -6,9 +6,10 @@ import type { ChatRequestBody } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-// gemini-2.0-flash is on the Gemini API free tier and available to new keys.
-// Override via the GEMINI_MODEL env var if you want a different model.
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+// gemini-flash-latest is an alias that always resolves to the current free-tier
+// Flash model, so it won't 404 when Google retires a specific version.
+// Override via the GEMINI_MODEL env var to pin a specific model.
+const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
           contents,
           config: {
             systemInstruction: buildSystemPrompt(todayISO),
-            maxOutputTokens: 16384,
+            maxOutputTokens: 32768,
             temperature: 0.6,
           },
         });
