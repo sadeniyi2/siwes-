@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AssistantMessage, { ParsedEntry } from "@/components/AssistantMessage";
+import KeyModal from "@/components/KeyModal";
 import Toast from "@/components/Toast";
 import {
   buildMemory,
   clearChat,
+  loadApiKey,
   loadChat,
   loadEntries,
   loadProfile,
@@ -44,6 +46,11 @@ export default function AssistantPage() {
   const [lastUserText, setLastUserText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
+  const [hasKey, setHasKey] = useState(true);
+  const [keyModal, setKeyModal] = useState<
+    null | "setup" | "invalid_key" | "quota"
+  >(null);
+  const [pendingRetry, setPendingRetry] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -57,6 +64,10 @@ export default function AssistantPage() {
     setFirstName(profile.fullName.split(/\s+/)[0]);
     setMessages(loadChat());
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
+    const sync = () => setHasKey(!!loadApiKey());
+    sync();
+    window.addEventListener("siwes-key-change", sync);
+    return () => window.removeEventListener("siwes-key-change", sync);
   }, [router]);
 
   useEffect(() => {
@@ -73,6 +84,15 @@ export default function AssistantPage() {
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
+
+    // No key yet? Remember what they wanted to send and ask for a key first.
+    const key = loadApiKey();
+    if (!key) {
+      setPendingRetry(trimmed);
+      setKeyModal("setup");
+      return;
+    }
+
     setInput("");
     requestAnimationFrame(autoGrow);
     setLastUserText(trimmed);
@@ -91,7 +111,10 @@ export default function AssistantPage() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-gemini-key": key,
+        },
         signal: controller.signal,
         body: JSON.stringify({
           // Send the conversation without the empty assistant placeholder
@@ -99,6 +122,23 @@ export default function AssistantPage() {
           memory: buildMemory(),
         }),
       });
+
+      // Auth / quota problems come back as JSON with a machine-readable reason.
+      if (res.status === 401 || res.status === 429) {
+        let reason: "invalid_key" | "quota" = "invalid_key";
+        try {
+          const j = await res.json();
+          reason = j.reason === "quota" ? "quota" : "invalid_key";
+        } catch {
+          /* ignore */
+        }
+        // Drop the empty assistant bubble, restore the input, open the modal.
+        setMessages((prev) => prev.slice(0, -2));
+        setInput(trimmed);
+        setPendingRetry(trimmed);
+        setKeyModal(reason);
+        return;
+      }
 
       if (!res.ok || !res.body) {
         const detail = await res.text().catch(() => "");
@@ -173,6 +213,21 @@ export default function AssistantPage() {
       style={{ minHeight: "calc(100dvh - 8.5rem)" }}
     >
       <Toast message={toast} onDone={() => setToast(null)} />
+      <KeyModal
+        open={keyModal !== null}
+        reason={keyModal ?? "setup"}
+        onClose={() => {
+          setKeyModal(null);
+          setHasKey(!!loadApiKey());
+          // If a key is now present and a message was waiting, send it.
+          if (loadApiKey() && pendingRetry) {
+            const t = pendingRetry;
+            setPendingRetry(null);
+            setInput("");
+            setTimeout(() => send(t), 0);
+          }
+        }}
+      />
 
       <div className="mb-3 flex items-center gap-2">
         <div className="-mx-3 flex flex-1 gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
@@ -187,6 +242,17 @@ export default function AssistantPage() {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => setKeyModal("setup")}
+          title={hasKey ? "Your Gemini key is connected" : "Add your Gemini key"}
+          className={`chip shrink-0 ${
+            hasKey
+              ? "border-emerald-300 text-emerald-700"
+              : "border-margin/40 text-margin"
+          }`}
+        >
+          🔑 {hasKey ? "Key" : "Add key"}
+        </button>
         {messages.length > 0 && (
           <button
             onClick={handleClear}

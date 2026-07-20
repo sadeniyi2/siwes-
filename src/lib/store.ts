@@ -5,6 +5,24 @@ import { ChatMessage, LogEntry, Profile, formatLongDate } from "./types";
 const ENTRIES_KEY = "siwes.entries.v1";
 const CHAT_KEY = "siwes.chat.v1";
 const PROFILE_KEY = "siwes.profile.v1";
+const APIKEY_KEY = "siwes.geminikey.v1";
+
+/** The visitor's own Gemini API key — stored only in this browser. */
+export function loadApiKey(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(APIKEY_KEY) ?? "";
+}
+
+export function saveApiKey(key: string) {
+  localStorage.setItem(APIKEY_KEY, key.trim());
+  // Let other tabs / components react to the change.
+  window.dispatchEvent(new Event("siwes-key-change"));
+}
+
+export function clearApiKey() {
+  localStorage.removeItem(APIKEY_KEY);
+  window.dispatchEvent(new Event("siwes-key-change"));
+}
 
 export function loadProfile(): Profile | null {
   if (typeof window === "undefined") return null;

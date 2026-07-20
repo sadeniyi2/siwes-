@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadProfile, saveProfile } from "@/lib/store";
+import { loadApiKey, loadProfile, saveApiKey, saveProfile } from "@/lib/store";
 import { Profile, dayNameFromISO, formatLongDate } from "@/lib/types";
 
 const EMPTY: Profile = {
@@ -45,6 +45,7 @@ const inputCls =
 export default function SetupPage() {
   const router = useRouter();
   const [p, setP] = useState<Profile>(EMPTY);
+  const [apiKey, setApiKey] = useState("");
   const [isEdit, setIsEdit] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +55,7 @@ export default function SetupPage() {
       setP({ ...EMPTY, ...existing });
       setIsEdit(true);
     }
+    setApiKey(loadApiKey());
   }, []);
 
   function set<K extends keyof Profile>(key: K, value: Profile[K]) {
@@ -76,6 +78,7 @@ export default function SetupPage() {
       firmName: p.firmName.trim(),
       durationWeeks: p.durationWeeks ? Number(p.durationWeeks) : undefined,
     });
+    if (apiKey.trim()) saveApiKey(apiKey);
     router.push("/");
   }
 
@@ -219,6 +222,35 @@ export default function SetupPage() {
           />
           I also work on Saturdays
         </label>
+
+        <h2 className="mb-1 font-display text-sm font-bold uppercase tracking-widest text-accent-deep">
+          Your AI key
+        </h2>
+        <p className="mb-3 text-xs leading-relaxed text-ink-soft">
+          This app runs on your own free Google Gemini key, so your usage is
+          yours alone and stays private to this browser. Get one free (no card)
+          at{" "}
+          <a
+            href="https://aistudio.google.com/apikey"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-accent underline underline-offset-2"
+          >
+            aistudio.google.com/apikey
+          </a>
+          . You can also add it later.
+        </p>
+        <div className="mb-6">
+          <Field label="Gemini API key">
+            <input
+              type="password"
+              className={inputCls}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="AIza…"
+            />
+          </Field>
+        </div>
 
         {error && (
           <p className="animate-rise mb-4 rounded-xl border border-margin/30 bg-margin/10 px-4 py-2.5 text-sm text-margin">

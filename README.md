@@ -14,11 +14,14 @@ Internship: **starts Monday, 13 July 2026 · Monday–Saturday**.
 
 ## Deploy to Vercel
 
+Every visitor brings **their own** free Gemini key inside the app (stored only in their browser), so the app costs you nothing to run and each person's usage is their own. When a visitor's free quota runs out, the app prompts them to paste a new key — their logbook, profile, and history are untouched.
+
 1. Push this repository to GitHub (already done if you're reading this there).
-2. Get a **free** Gemini API key (no credit card needed) at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
-3. Go to [vercel.com/new](https://vercel.com/new) and import the repository. Vercel auto-detects Next.js — no build settings needed.
-4. Add one environment variable: `GEMINI_API_KEY`.
-5. Deploy.
+2. Go to [vercel.com/new](https://vercel.com/new) and import the repository. Vercel auto-detects Next.js — no build settings needed.
+3. Deploy. **No environment variables are required** — leave `GEMINI_API_KEY` unset so every visitor uses their own key and never spends your quota.
+4. (Optional) Set `GEMINI_API_KEY` in Vercel only if you want a shared fallback key that's used when a visitor hasn't added their own — note this *would* spend your quota.
+
+Each visitor gets a free key (no credit card) at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and pastes it on the Setup screen or when prompted.
 
 ## Run locally
 
