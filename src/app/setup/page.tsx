@@ -238,7 +238,16 @@ export default function SetupPage() {
           >
             aistudio.google.com/apikey
           </a>
-          . You can also add it later.
+          . You can also add it later.{" "}
+          <a
+            href="/SIWES-Logbook-Assistant-Guide.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-accent underline underline-offset-2"
+          >
+            Download the step-by-step guide (PDF)
+          </a>
+          .
         </p>
         <div className="mb-6">
           <Field label="Gemini API key">

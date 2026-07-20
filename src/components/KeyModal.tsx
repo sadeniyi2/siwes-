@@ -90,6 +90,15 @@ export default function KeyModal({
           <li>3. Copy the key and paste it below</li>
         </ol>
 
+        <a
+          href="/SIWES-Logbook-Assistant-Guide.pdf"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mb-4 block text-center text-xs font-medium text-accent underline underline-offset-2"
+        >
+          📄 New to this? Download the simple picture guide (PDF)
+        </a>
+
         <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
           Gemini API key
         </label>
