@@ -97,17 +97,27 @@ export default function SetupPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: fullName }),
       });
-      const j = await res.json();
+      const j = await res.json().catch(() => ({}));
       if (res.ok && j.ok) {
-        saveAccess(j.token, j.tier);
+        saveAccess(j.token, j.tier, "free");
         router.push("/");
         return;
       }
+      // Server not configured yet — tell the user instead of silently paywalling.
+      if (res.status === 500) {
+        setChecking(false);
+        setError(
+          j.message ||
+            "The app isn't fully set up yet (missing ACCESS_TOKEN_SECRET). Please contact the admin.",
+        );
+        return;
+      }
+      // 403 = not on the free list → continue to the plans page below.
     } catch {
-      /* fall through to the plans page */
+      /* network issue — fall through to the plans page */
     }
     setChecking(false);
-    // Everyone else chooses a plan.
+    // Everyone else chooses a plan (or a free trial there).
     router.push("/unlock");
   }
 

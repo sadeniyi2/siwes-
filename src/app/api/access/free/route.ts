@@ -4,31 +4,46 @@ import { signAccess } from "@/lib/token";
 export const runtime = "nodejs";
 
 // People who get full Pro access for free — matched by name on the login page.
-const FREE_PRO_NAMES = [
+// You can add more names WITHOUT editing code by setting the FREE_ACCESS_NAMES
+// env var (comma or semicolon separated), e.g. "Jane Doe, John Smith".
+const BUILTIN_FREE_NAMES = [
   "Adeniyi Oluwademiladeayo Samuel",
   "Ogunmokun Ayomide",
   "Oyebamire Oluwaseun",
 ];
 
+function freeNames(): string[] {
+  const fromEnv = (process.env.FREE_ACCESS_NAMES || "")
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [...BUILTIN_FREE_NAMES, ...fromEnv];
+}
+
 function words(s: string): string[] {
   return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // strip accents
     .toLowerCase()
-    .replace(/[^a-z\s]/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
     .filter(Boolean);
 }
 
-/** Forgiving match: word order doesn't matter, and a shorter name still matches
- *  as long as every word it has is part of an allowed name (min 2 words). */
+/** Forgiving match: word order doesn't matter, titles/extra words are ignored,
+ *  and even a mistyped word is tolerated — a name matches an allowed entry when
+ *  at least 2 of its words match and they cover ~60%+ of the allowed name. This
+ *  handles a misspelled long middle name (e.g. "Oluwademiladeayo") gracefully. */
 function isAllowed(input: string): boolean {
   const a = new Set(words(input));
   if (a.size === 0) return false;
-  return FREE_PRO_NAMES.some((name) => {
-    const b = new Set(words(name));
-    if (b.size === 0) return false;
-    const common = [...b].filter((w) => a.has(w)).length;
-    const minSize = Math.min(a.size, b.size);
-    return common >= 2 && common === minSize;
+  return freeNames().some((name) => {
+    const b = words(name);
+    if (b.length === 0) return false;
+    const common = b.filter((w) => a.has(w)).length;
+    if (b.length === 1) return common === 1; // single-word name → exact word
+    const needed = Math.max(2, Math.ceil(b.length * 0.6));
+    return common >= needed;
   });
 }
 
