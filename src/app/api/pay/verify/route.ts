@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
 
   // Tier from the amount actually paid (verified server-side, never trusted from
   // the client) — and it must not exceed what the tx_ref claimed.
-  const tier: Tier | null = amount >= 5000 ? "pro" : amount >= 3000 ? "basic" : null;
+  const tier: Tier | null = amount >= 2500 ? "pro" : amount >= 1500 ? "basic" : null;
   if (!tier) {
     return Response.json(
       { ok: false, message: "The amount paid doesn't match a plan." },

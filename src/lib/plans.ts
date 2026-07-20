@@ -16,7 +16,7 @@ export const PLANS: Record<Tier, PlanInfo> = {
   basic: {
     id: "basic",
     name: "Basic",
-    price: 3000,
+    price: 1500,
     tagline: "Everything you need for the daily logbook.",
     benefits: [
       "Turn your messy daily notes into clean, professional 35–70 word logbook entries",
@@ -34,7 +34,7 @@ export const PLANS: Record<Tier, PlanInfo> = {
   pro: {
     id: "pro",
     name: "Pro",
-    price: 5000,
+    price: 2500,
     tagline: "The complete package — right up to your final report.",
     benefits: [
       "Everything in Basic, plus:",
