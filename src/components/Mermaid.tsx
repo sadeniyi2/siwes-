@@ -40,18 +40,12 @@ export default function Mermaid({ chart }: { chart: string }) {
     if (ref.current && svg) ref.current.innerHTML = svg;
   }, [svg]);
 
-  function downloadSVG() {
-    if (!svg) return;
-    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    triggerDownload(url, `siwes-diagram-${Date.now()}.svg`);
-    URL.revokeObjectURL(url);
-  }
-
-  function downloadPNG() {
+  /** Serialize the rendered <svg> into a well-formed, standalone XML string.
+   *  Mermaid emits HTML-style void tags (<br>) that break strict XML parsing
+   *  when a .svg is opened on its own, so we self-close them. */
+  function serializeSVG(): { xml: string; w: number; h: number } | null {
     const svgEl = ref.current?.querySelector("svg");
-    if (!svgEl) return;
-    // Rasterize the SVG onto a canvas at 2x for a crisp, report-ready image.
+    if (!svgEl) return null;
     const rect = svgEl.getBoundingClientRect();
     const vb = svgEl.viewBox?.baseVal;
     const w = Math.ceil((vb && vb.width) || rect.width || 900);
@@ -59,7 +53,32 @@ export default function Mermaid({ chart }: { chart: string }) {
     const clone = svgEl.cloneNode(true) as SVGSVGElement;
     clone.setAttribute("width", String(w));
     clone.setAttribute("height", String(h));
-    const xml = new XMLSerializer().serializeToString(clone);
+    if (!clone.getAttribute("xmlns"))
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    if (!clone.getAttribute("xmlns:xlink"))
+      clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+    let xml = new XMLSerializer().serializeToString(clone);
+    // Self-close any stray void HTML elements so the file is valid XML.
+    xml = xml
+      .replace(/<(br|hr|img|input)([^>]*?)(?<!\/)>/g, "<$1$2/>")
+      .replace(/&nbsp;/g, "&#160;");
+    return { xml, w, h };
+  }
+
+  function downloadSVG() {
+    const s = serializeSVG();
+    if (!s) return;
+    const doc = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n${s.xml}`;
+    const blob = new Blob([doc], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, `siwes-diagram-${Date.now()}.svg`);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function downloadPNG() {
+    const s = serializeSVG();
+    if (!s) return;
+    const { xml, w, h } = s;
     // Data URL (not blob) so the image reliably loads for rasterizing.
     const dataUrl =
       "data:image/svg+xml;base64," +
