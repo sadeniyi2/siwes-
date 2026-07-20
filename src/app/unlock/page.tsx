@@ -4,7 +4,7 @@ import Script from "next/script";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile } from "@/lib/store";
-import { PLANS, TRIAL_LIMIT, Tier, loadTier, saveAccess, saveTrial } from "@/lib/access";
+import { PLANS, TRIAL_DAYS, Tier, loadTier, saveAccess, saveTrial } from "@/lib/access";
 
 // Minimal typing for the Flutterwave inline checkout global.
 declare global {
@@ -113,7 +113,7 @@ export default function UnlockPage() {
       const res = await fetch("/api/access/trial", { method: "POST" });
       const j = await res.json();
       if (res.ok && j.ok) {
-        saveTrial(j.token);
+        saveTrial(j.token, j.exp);
         router.replace("/");
         return;
       }
@@ -192,11 +192,11 @@ export default function UnlockPage() {
           </span>
           <div className="flex-1">
             <p className="font-display text-base font-semibold text-accent-deep">
-              Not sure yet? Try it free first.
+              Not sure yet? Try it free for {TRIAL_DAYS} days.
             </p>
             <p className="text-sm text-ink-soft">
-              Turn {TRIAL_LIMIT} of your real work days into professional
-              logbook entries — no payment, no card. Pay only if you like it.
+              Full access to daily entries and your logbook for {TRIAL_DAYS}{" "}
+              days — no payment, no card. Pay only if you like it.
             </p>
           </div>
           <button
@@ -204,7 +204,7 @@ export default function UnlockPage() {
             disabled={trialBusy}
             className="btn-primary shrink-0 disabled:opacity-60"
           >
-            {trialBusy ? "Starting…" : `Start free trial →`}
+            {trialBusy ? "Starting…" : `Start ${TRIAL_DAYS}-day trial →`}
           </button>
         </div>
       )}

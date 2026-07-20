@@ -2,11 +2,11 @@ import { signAccess } from "@/lib/token";
 
 export const runtime = "nodejs";
 
-const TRIAL_DAYS = 7;
+const TRIAL_DAYS = 3;
 
-/** Mint a short, Basic-level trial token so people can test before paying.
- *  The AI runs on each user's own Gemini key, so a trial costs the owner
- *  nothing — the client caps the number of free generations. */
+/** Mint a Basic-level trial token so people can test before paying. Access
+ *  lasts TRIAL_DAYS days (enforced server-side via the token's expiry). The AI
+ *  runs on each user's own Gemini key, so a trial costs the owner nothing. */
 export async function POST() {
   if (!process.env.ACCESS_TOKEN_SECRET) {
     return Response.json(
@@ -15,13 +15,14 @@ export async function POST() {
     );
   }
   const now = Date.now();
+  const exp = now + TRIAL_DAYS * 24 * 60 * 60 * 1000;
   const token = signAccess({
     email: "",
     tier: "basic",
     kind: "trial",
     ref: `trial:${now}`,
     iat: now,
-    exp: now + TRIAL_DAYS * 24 * 60 * 60 * 1000,
+    exp,
   });
-  return Response.json({ ok: true, token, tier: "basic", kind: "trial" });
+  return Response.json({ ok: true, token, tier: "basic", kind: "trial", exp });
 }
