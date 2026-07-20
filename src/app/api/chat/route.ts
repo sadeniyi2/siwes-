@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { NextRequest } from "next/server";
 import { buildSystemPrompt } from "@/lib/prompt";
 import { verifyAccess } from "@/lib/token";
-import { isProAction } from "@/lib/access";
+import { isProAction } from "@/lib/plans";
 import type { ChatRequestBody } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -74,6 +74,20 @@ export async function POST(req: NextRequest) {
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return new Response("messages is required", { status: 400 });
+  }
+
+  // Bound the payload so the endpoint can't be abused with huge requests.
+  if (body.messages.length > 80) {
+    return new Response("Too many messages", { status: 400 });
+  }
+  const totalChars =
+    body.messages.reduce((n, m) => n + (m?.content?.length ?? 0), 0) +
+    (body.memory?.length ?? 0);
+  if (totalChars > 500_000) {
+    return new Response("Request too large", { status: 413 });
+  }
+  if (body.messages.some((m) => m.role !== "user" && m.role !== "assistant")) {
+    return new Response("Invalid message role", { status: 400 });
   }
 
   // Tier enforcement: Basic users can't trigger Pro-only actions.

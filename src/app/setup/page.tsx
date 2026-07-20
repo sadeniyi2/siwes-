@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadApiKey, loadProfile, saveApiKey, saveProfile } from "@/lib/store";
-import { loadTier } from "@/lib/access";
+import { loadTier, saveAccess } from "@/lib/access";
 import { Profile, dayNameFromISO, formatLongDate } from "@/lib/types";
 
 const EMPTY: Profile = {
@@ -48,6 +48,7 @@ export default function SetupPage() {
   const [p, setP] = useState<Profile>(EMPTY);
   const [apiKey, setApiKey] = useState("");
   const [isEdit, setIsEdit] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,7 +64,7 @@ export default function SetupPage() {
     setP((prev) => ({ ...prev, [key]: value }));
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!p.fullName.trim() || !p.firmName.trim() || !p.startDate) {
       setError("Please fill your name, your firm, and your start date.");
@@ -73,15 +74,41 @@ export default function SetupPage() {
       setError("Your start date falls on a Sunday — please double-check it.");
       return;
     }
+    const fullName = p.fullName.trim();
     saveProfile({
       ...p,
-      fullName: p.fullName.trim(),
+      fullName,
       firmName: p.firmName.trim(),
       durationWeeks: p.durationWeeks ? Number(p.durationWeeks) : undefined,
     });
     if (apiKey.trim()) saveApiKey(apiKey);
-    // After the form, paid users go straight in; everyone else must unlock.
-    router.push(loadTier() ? "/" : "/unlock");
+
+    // Already unlocked (paid or free) → straight into the app.
+    if (loadTier()) {
+      router.push("/");
+      return;
+    }
+
+    // Free-access names skip payment entirely and go straight in.
+    setChecking(true);
+    try {
+      const res = await fetch("/api/access/free", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fullName }),
+      });
+      const j = await res.json();
+      if (res.ok && j.ok) {
+        saveAccess(j.token, j.tier);
+        router.push("/");
+        return;
+      }
+    } catch {
+      /* fall through to the plans page */
+    }
+    setChecking(false);
+    // Everyone else chooses a plan.
+    router.push("/unlock");
   }
 
   return (
@@ -270,8 +297,12 @@ export default function SetupPage() {
         )}
 
         <div className="flex items-center gap-3">
-          <button type="submit" className="btn-primary">
-            {isEdit ? "Save changes" : "Continue to plans →"}
+          <button type="submit" disabled={checking} className="btn-primary disabled:opacity-60">
+            {checking
+              ? "Checking access…"
+              : isEdit
+                ? "Save changes"
+                : "Continue →"}
           </button>
           {isEdit && (
             <button

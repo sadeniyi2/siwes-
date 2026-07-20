@@ -28,9 +28,12 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, message: "Invalid request" }, { status: 400 });
   }
 
-  if (!body.transactionId) {
+  // Sanitize the transaction id — it goes into an outbound URL path, so reject
+  // anything that isn't a plain id to prevent path traversal / URL injection.
+  const txId = String(body.transactionId ?? "");
+  if (!txId || !/^[a-zA-Z0-9_-]{1,64}$/.test(txId)) {
     return Response.json(
-      { ok: false, message: "Missing transaction id" },
+      { ok: false, message: "Invalid transaction id" },
       { status: 400 },
     );
   }
@@ -45,7 +48,7 @@ export async function POST(req: NextRequest) {
   };
   try {
     const res = await fetch(
-      `https://api.flutterwave.com/v3/transactions/${body.transactionId}/verify`,
+      `https://api.flutterwave.com/v3/transactions/${encodeURIComponent(txId)}/verify`,
       { headers: { Authorization: `Bearer ${secret}` } },
     );
     const json = await res.json();
@@ -65,15 +68,27 @@ export async function POST(req: NextRequest) {
 
   const amount = Number(data.amount ?? 0);
   const currency = data.currency ?? "NGN";
+  const txRef = String(data.tx_ref ?? "");
 
-  if (data.status !== "successful" || currency !== "NGN") {
+  if (data.status !== "successful" || currency !== "NGN" || !Number.isFinite(amount)) {
     return Response.json(
       { ok: false, message: "Payment was not completed." },
       { status: 402 },
     );
   }
 
-  // Tier from the amount actually paid.
+  // The transaction must be one our own checkout created (tx_ref is set by us as
+  // `siwes-<tier>-<time>`). This stops a random valid Flutterwave transaction id
+  // from another merchant/app being replayed here to mint free access.
+  if (!/^siwes-(basic|pro)-/.test(txRef)) {
+    return Response.json(
+      { ok: false, message: "This payment could not be matched to this app." },
+      { status: 402 },
+    );
+  }
+
+  // Tier from the amount actually paid (verified server-side, never trusted from
+  // the client) — and it must not exceed what the tx_ref claimed.
   const tier: Tier | null = amount >= 5000 ? "pro" : amount >= 3000 ? "basic" : null;
   if (!tier) {
     return Response.json(
@@ -86,7 +101,7 @@ export async function POST(req: NextRequest) {
   const token = signAccess({
     email,
     tier,
-    ref: String(data.tx_ref ?? body.transactionId),
+    ref: txRef,
     iat: Date.now(),
   });
 

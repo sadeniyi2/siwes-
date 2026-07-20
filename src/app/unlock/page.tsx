@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile } from "@/lib/store";
 import { PLANS, Tier, loadTier, saveAccess } from "@/lib/access";
@@ -40,12 +40,54 @@ export default function UnlockPage() {
   const [paying, setPaying] = useState<Tier | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentTier, setCurrentTier] = useState<Tier | null>(null);
+  const [freeName, setFreeName] = useState("");
+  const [freeBusy, setFreeBusy] = useState(false);
+  const [freeError, setFreeError] = useState<string | null>(null);
+
+  const claimFree = useCallback(
+    async (candidate: string, silent = false) => {
+      if (!candidate.trim()) {
+        if (!silent) setFreeError("Please enter your full name.");
+        return;
+      }
+      setFreeBusy(true);
+      setFreeError(null);
+      try {
+        const res = await fetch("/api/access/free", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: candidate }),
+        });
+        const j = await res.json();
+        if (res.ok && j.ok) {
+          saveAccess(j.token, j.tier);
+          router.replace("/");
+          return;
+        }
+        if (!silent) {
+          setFreeError(
+            j.message || "That name isn't on the free-access list.",
+          );
+        }
+      } catch {
+        if (!silent) setFreeError("Something went wrong. Please try again.");
+      } finally {
+        setFreeBusy(false);
+      }
+    },
+    [router],
+  );
 
   useEffect(() => {
     const p = loadProfile();
-    if (p) setName(p.fullName);
+    if (p) {
+      setName(p.fullName);
+      setFreeName(p.fullName);
+      // Silently unlock if this profile name is on the free-access list.
+      if (!loadTier()) claimFree(p.fullName, true);
+    }
     setCurrentTier(loadTier());
-  }, []);
+  }, [claimFree]);
 
   async function verify(transactionId: string | number) {
     const res = await fetch("/api/pay/verify", {
@@ -156,6 +198,44 @@ export default function UnlockPage() {
           {error}
         </p>
       )}
+
+      {/* Free access for invited names */}
+      <details className="group mb-5 rounded-2xl border border-emerald-300/60 bg-emerald-50/60 p-4 shadow-card">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-emerald-800">
+          <span aria-hidden>🎟️</span>
+          Have free access? Enter your name
+          <span className="ml-auto text-emerald-600 transition-transform group-open:rotate-180">
+            ▾
+          </span>
+        </summary>
+        <div className="mt-3">
+          <p className="mb-2 text-xs leading-relaxed text-emerald-800/80">
+            If you&apos;ve been given free access, type your full name exactly as
+            you were told and tap unlock — no payment needed.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={freeName}
+              onChange={(e) => setFreeName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && claimFree(freeName)}
+              placeholder="Your full name"
+              className="flex-1 rounded-xl border border-emerald-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            />
+            <button
+              onClick={() => claimFree(freeName)}
+              disabled={freeBusy}
+              className="btn shrink-0 bg-emerald-600 px-5 py-2.5 text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {freeBusy ? "Checking…" : "Unlock free"}
+            </button>
+          </div>
+          {freeError && (
+            <p className="animate-rise mt-2 text-xs font-medium text-margin">
+              {freeError}
+            </p>
+          )}
+        </div>
+      </details>
 
       <div className="grid items-start gap-4 sm:grid-cols-2">
         {(["basic", "pro"] as Tier[]).map((id) => {
