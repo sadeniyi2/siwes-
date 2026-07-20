@@ -6,7 +6,14 @@ import AssistantMessage, { ParsedEntry } from "@/components/AssistantMessage";
 import AccessGate from "@/components/AccessGate";
 import KeyModal from "@/components/KeyModal";
 import Toast from "@/components/Toast";
-import { Tier, loadAccessToken } from "@/lib/access";
+import {
+  TRIAL_LIMIT,
+  Tier,
+  bumpTrialUsed,
+  isTrial,
+  loadAccessToken,
+  trialRemaining,
+} from "@/lib/access";
 import {
   buildMemory,
   clearChat,
@@ -57,6 +64,8 @@ function Assistant({ tier }: { tier: Tier }) {
     null | "setup" | "invalid_key" | "quota"
   >(null);
   const [pendingRetry, setPendingRetry] = useState<string | null>(null);
+  const [onTrial, setOnTrial] = useState(false);
+  const [trialLeft, setTrialLeft] = useState(TRIAL_LIMIT);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -70,10 +79,18 @@ function Assistant({ tier }: { tier: Tier }) {
     setFirstName(profile.fullName.split(/\s+/)[0]);
     setMessages(loadChat());
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
-    const sync = () => setHasKey(!!loadApiKey());
+    const sync = () => {
+      setHasKey(!!loadApiKey());
+      setOnTrial(isTrial());
+      setTrialLeft(trialRemaining());
+    };
     sync();
     window.addEventListener("siwes-key-change", sync);
-    return () => window.removeEventListener("siwes-key-change", sync);
+    window.addEventListener("siwes-access-change", sync);
+    return () => {
+      window.removeEventListener("siwes-key-change", sync);
+      window.removeEventListener("siwes-access-change", sync);
+    };
   }, [router]);
 
   useEffect(() => {
@@ -90,6 +107,13 @@ function Assistant({ tier }: { tier: Tier }) {
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
+
+    // Trial finished? Send them to unlock instead of generating.
+    if (isTrial() && trialRemaining() <= 0) {
+      setToast("Your free trial is finished — unlock to keep going.");
+      setTimeout(() => router.push("/unlock"), 900);
+      return;
+    }
 
     // No key yet? Remember what they wanted to send and ask for a key first.
     const key = loadApiKey();
@@ -185,6 +209,16 @@ function Assistant({ tier }: { tier: Tier }) {
       ];
       setMessages(finalMessages);
       saveChat(finalMessages);
+
+      // Count a successful trial generation.
+      if (isTrial()) {
+        bumpTrialUsed();
+        const left = trialRemaining();
+        setTrialLeft(left);
+        if (left === 0) {
+          setToast("That was your last free try — unlock to keep going.");
+        }
+      }
     } catch (err) {
       const msg =
         err instanceof Error && err.name !== "AbortError"
@@ -291,6 +325,33 @@ function Assistant({ tier }: { tier: Tier }) {
           </button>
         )}
       </div>
+
+      {onTrial && (
+        <div className="animate-rise mb-3 flex items-center gap-3 rounded-xl border border-accent/30 bg-accent-wash px-4 py-2.5">
+          <span aria-hidden className="text-lg">
+            {trialLeft > 0 ? "✨" : "🔒"}
+          </span>
+          <p className="flex-1 text-sm text-accent-deep">
+            {trialLeft > 0 ? (
+              <>
+                <strong>Free trial</strong> — {trialLeft} of {TRIAL_LIMIT} free{" "}
+                {trialLeft === 1 ? "generation" : "generations"} left.
+              </>
+            ) : (
+              <>
+                <strong>Your free trial is finished.</strong> Unlock to keep
+                using the assistant.
+              </>
+            )}
+          </p>
+          <button
+            onClick={() => router.push("/unlock")}
+            className="btn shrink-0 bg-accent px-3.5 py-1.5 text-xs text-white hover:bg-accent-dark"
+          >
+            Unlock
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 space-y-4 overflow-y-auto rounded-2xl border border-ink/10 bg-paper-sheet p-4 shadow-sheet">
         {messages.length === 0 && (

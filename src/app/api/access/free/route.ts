@@ -61,8 +61,9 @@ export async function POST(req: NextRequest) {
   const token = signAccess({
     email: "",
     tier: "pro",
+    kind: "free",
     ref: `free:${name.trim().slice(0, 40)}`,
     iat: Date.now(),
   });
-  return Response.json({ ok: true, token, tier: "pro" });
+  return Response.json({ ok: true, token, tier: "pro", kind: "free" });
 }

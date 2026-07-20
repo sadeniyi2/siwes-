@@ -37,7 +37,7 @@ export default function AccessGate({
         const j = await res.json();
         if (cancelled) return;
         if (j.valid) {
-          saveAccess(token, j.tier as Tier);
+          saveAccess(token, j.tier as Tier, j.kind ?? "paid");
           setTier(j.tier as Tier);
           setState("ok");
         } else {

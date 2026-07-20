@@ -3,11 +3,16 @@ import crypto from "crypto";
 
 export type Tier = "basic" | "pro";
 
+export type Kind = "paid" | "free" | "trial";
+
 export interface AccessClaims {
   email: string;
   tier: Tier;
   ref: string;
   iat: number;
+  kind?: Kind;
+  /** Optional expiry (ms epoch) — used for time-limited trials. */
+  exp?: number;
 }
 
 const SECRET = process.env.ACCESS_TOKEN_SECRET || "";
@@ -38,7 +43,12 @@ export function verifyAccess(token: string | null | undefined): AccessClaims | n
   const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   try {
-    return JSON.parse(Buffer.from(payload, "base64url").toString()) as AccessClaims;
+    const claims = JSON.parse(
+      Buffer.from(payload, "base64url").toString(),
+    ) as AccessClaims;
+    // Reject expired trial tokens.
+    if (typeof claims.exp === "number" && Date.now() > claims.exp) return null;
+    return claims;
   } catch {
     return null;
   }

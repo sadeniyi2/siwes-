@@ -17,5 +17,10 @@ export async function POST(req: NextRequest) {
   if (!claims) {
     return Response.json({ valid: false });
   }
-  return Response.json({ valid: true, tier: claims.tier, email: claims.email });
+  return Response.json({
+    valid: true,
+    tier: claims.tier,
+    kind: claims.kind ?? "paid",
+    email: claims.email,
+  });
 }

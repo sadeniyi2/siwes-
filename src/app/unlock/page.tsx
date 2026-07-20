@@ -4,7 +4,7 @@ import Script from "next/script";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile } from "@/lib/store";
-import { PLANS, Tier, loadTier, saveAccess } from "@/lib/access";
+import { PLANS, TRIAL_LIMIT, Tier, loadTier, saveAccess, saveTrial } from "@/lib/access";
 
 // Minimal typing for the Flutterwave inline checkout global.
 declare global {
@@ -101,8 +101,28 @@ export default function UnlockPage() {
       setPaying(null);
       return;
     }
-    saveAccess(j.token, j.tier);
+    saveAccess(j.token, j.tier, "paid");
     router.replace("/");
+  }
+
+  const [trialBusy, setTrialBusy] = useState(false);
+  async function startTrial() {
+    setError(null);
+    setTrialBusy(true);
+    try {
+      const res = await fetch("/api/access/trial", { method: "POST" });
+      const j = await res.json();
+      if (res.ok && j.ok) {
+        saveTrial(j.token);
+        router.replace("/");
+        return;
+      }
+      setError(j.message || "Couldn't start the trial. Please try again.");
+    } catch {
+      setError("Couldn't start the trial. Please try again.");
+    } finally {
+      setTrialBusy(false);
+    }
   }
 
   function pay(tier: Tier) {
@@ -164,6 +184,30 @@ export default function UnlockPage() {
           Flutterwave, and you&apos;re in.
         </p>
       </div>
+
+      {!currentTier && (
+        <div className="animate-rise mb-5 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-accent/40 bg-accent-wash p-5 text-center sm:flex-row sm:text-left">
+          <span className="text-3xl" aria-hidden>
+            ✨
+          </span>
+          <div className="flex-1">
+            <p className="font-display text-base font-semibold text-accent-deep">
+              Not sure yet? Try it free first.
+            </p>
+            <p className="text-sm text-ink-soft">
+              Turn {TRIAL_LIMIT} of your real work days into professional
+              logbook entries — no payment, no card. Pay only if you like it.
+            </p>
+          </div>
+          <button
+            onClick={startTrial}
+            disabled={trialBusy}
+            className="btn-primary shrink-0 disabled:opacity-60"
+          >
+            {trialBusy ? "Starting…" : `Start free trial →`}
+          </button>
+        </div>
+      )}
 
       <div className="mb-5 rounded-2xl border border-ink/10 bg-paper-sheet p-4 shadow-card sm:p-5">
         <div className="grid gap-3 sm:grid-cols-2">

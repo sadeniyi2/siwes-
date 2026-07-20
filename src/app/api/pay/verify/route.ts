@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
   const token = signAccess({
     email,
     tier,
+    kind: "paid",
     ref: txRef,
     iat: Date.now(),
   });
