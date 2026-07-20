@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AssistantMessage, { ParsedEntry } from "@/components/AssistantMessage";
+import AccessGate from "@/components/AccessGate";
 import KeyModal from "@/components/KeyModal";
 import Toast from "@/components/Toast";
+import { Tier, loadAccessToken } from "@/lib/access";
 import {
   buildMemory,
   clearChat,
@@ -18,10 +20,14 @@ import {
 import { ChatMessage, formatLongDate, weekNumberOf } from "@/lib/types";
 
 const QUICK_ACTIONS = [
-  { label: "Generate Weekly Summary", icon: "🗓" },
-  { label: "Generate Monthly Summary", icon: "🗂" },
-  { label: "Build Final Report", icon: "📄" },
+  { label: "Generate Weekly Summary", icon: "🗓", pro: false },
+  { label: "Generate Monthly Summary", icon: "🗂", pro: true },
+  { label: "Build Final Report", icon: "📄", pro: true },
 ];
+
+export default function AssistantPage() {
+  return <AccessGate render={(tier) => <Assistant tier={tier} />} />;
+}
 
 const EXAMPLE_PROMPTS = [
   "Today I set up VS Code and Git, then my supervisor showed me the company database and I practiced writing SQL queries.",
@@ -37,7 +43,7 @@ function AssistantAvatar() {
   );
 }
 
-export default function AssistantPage() {
+function Assistant({ tier }: { tier: Tier }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -114,6 +120,7 @@ export default function AssistantPage() {
         headers: {
           "Content-Type": "application/json",
           "x-gemini-key": key,
+          "x-access-token": loadAccessToken(),
         },
         signal: controller.signal,
         body: JSON.stringify({
@@ -122,6 +129,19 @@ export default function AssistantPage() {
           memory: buildMemory(),
         }),
       });
+
+      // Access expired/invalid → back to the unlock page.
+      if (res.status === 402) {
+        router.replace("/unlock");
+        return;
+      }
+      // Pro-only feature attempted on Basic → nudge to upgrade.
+      if (res.status === 403) {
+        setMessages((prev) => prev.slice(0, -2));
+        setToast("That's a Pro feature — upgrade to unlock it.");
+        setTimeout(() => router.push("/unlock"), 900);
+        return;
+      }
 
       // Auth / quota problems come back as JSON with a machine-readable reason.
       if (res.status === 401 || res.status === 429) {
@@ -231,7 +251,7 @@ export default function AssistantPage() {
 
       <div className="mb-3 flex items-center gap-2">
         <div className="-mx-3 flex flex-1 gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
-          {QUICK_ACTIONS.map((a) => (
+          {QUICK_ACTIONS.filter((a) => tier === "pro" || !a.pro).map((a) => (
             <button
               key={a.label}
               disabled={busy}
@@ -241,6 +261,15 @@ export default function AssistantPage() {
               <span aria-hidden>{a.icon}</span> {a.label}
             </button>
           ))}
+          {tier === "basic" && (
+            <button
+              onClick={() => router.push("/unlock")}
+              className="chip shrink-0 border-accent/40 bg-accent-wash font-semibold text-accent-dark"
+              title="Unlock monthly summaries, the final report builder, and diagrams"
+            >
+              ⭐ Upgrade to Pro
+            </button>
+          )}
         </div>
         <button
           onClick={() => setKeyModal("setup")}

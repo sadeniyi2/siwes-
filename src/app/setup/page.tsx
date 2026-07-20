@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadApiKey, loadProfile, saveApiKey, saveProfile } from "@/lib/store";
+import { loadTier } from "@/lib/access";
 import { Profile, dayNameFromISO, formatLongDate } from "@/lib/types";
 
 const EMPTY: Profile = {
@@ -79,7 +80,8 @@ export default function SetupPage() {
       durationWeeks: p.durationWeeks ? Number(p.durationWeeks) : undefined,
     });
     if (apiKey.trim()) saveApiKey(apiKey);
-    router.push("/");
+    // After the form, paid users go straight in; everyone else must unlock.
+    router.push(loadTier() ? "/" : "/unlock");
   }
 
   return (
@@ -269,7 +271,7 @@ export default function SetupPage() {
 
         <div className="flex items-center gap-3">
           <button type="submit" className="btn-primary">
-            {isEdit ? "Save changes" : "Start my logbook →"}
+            {isEdit ? "Save changes" : "Continue to plans →"}
           </button>
           {isEdit && (
             <button

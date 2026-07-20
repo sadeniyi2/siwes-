@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest } from "next/server";
 import { buildSystemPrompt } from "@/lib/prompt";
+import { verifyAccess } from "@/lib/token";
+import { isProAction } from "@/lib/access";
 import type { ChatRequestBody } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -37,6 +39,15 @@ function classify(message: string): { status: number; reason: string } {
 }
 
 export async function POST(req: NextRequest) {
+  // Paywall: require a valid, signed access token (proof of payment).
+  const claims = verifyAccess(req.headers.get("x-access-token"));
+  if (!claims) {
+    return Response.json(
+      { reason: "locked", message: "Your access could not be verified." },
+      { status: 402 },
+    );
+  }
+
   // Prefer the visitor's own key (sent as a header). Fall back to a server key
   // only if the owner chose to set one — leave GEMINI_API_KEY unset on Vercel
   // to keep every visitor on their own key.
@@ -63,6 +74,21 @@ export async function POST(req: NextRequest) {
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return new Response("messages is required", { status: 400 });
+  }
+
+  // Tier enforcement: Basic users can't trigger Pro-only actions.
+  if (claims.tier === "basic") {
+    const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
+    if (lastUser && isProAction(lastUser.content)) {
+      return Response.json(
+        {
+          reason: "pro_required",
+          message:
+            "That feature is part of the Pro plan. Upgrade to unlock monthly summaries, the final report builder, and diagrams.",
+        },
+        { status: 403 },
+      );
+    }
   }
 
   const ai = new GoogleGenAI({ apiKey });
