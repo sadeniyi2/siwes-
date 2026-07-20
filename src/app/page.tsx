@@ -10,8 +10,8 @@ import {
   Tier,
   isTrial,
   loadAccessToken,
-  trialDaysLeft,
   trialExpired,
+  trialExpiry,
 } from "@/lib/access";
 import {
   buildMemory,
@@ -33,6 +33,20 @@ const QUICK_ACTIONS = [
 
 export default function AssistantPage() {
   return <AccessGate render={(tier) => <Assistant tier={tier} />} />;
+}
+
+/** Live countdown like "2d 05h 31m 09s"; null once the trial has ended. */
+function formatCountdown(ms: number): string | null {
+  if (ms <= 0) return null;
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (d > 0) return `${d}d ${pad(h)}h ${pad(m)}m ${pad(sec)}s`;
+  if (h > 0) return `${pad(h)}h ${pad(m)}m ${pad(sec)}s`;
+  return `${pad(m)}m ${pad(sec)}s`;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -64,7 +78,7 @@ function Assistant({ tier }: { tier: Tier }) {
   >(null);
   const [pendingRetry, setPendingRetry] = useState<string | null>(null);
   const [onTrial, setOnTrial] = useState(false);
-  const [trialDays, setTrialDays] = useState(0);
+  const [countdown, setCountdown] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -81,7 +95,6 @@ function Assistant({ tier }: { tier: Tier }) {
     const sync = () => {
       setHasKey(!!loadApiKey());
       setOnTrial(isTrial());
-      setTrialDays(trialDaysLeft());
     };
     sync();
     window.addEventListener("siwes-key-change", sync);
@@ -91,6 +104,18 @@ function Assistant({ tier }: { tier: Tier }) {
       window.removeEventListener("siwes-access-change", sync);
     };
   }, [router]);
+
+  // Live trial countdown — ticks every second while on a trial.
+  useEffect(() => {
+    if (!onTrial) return;
+    const tick = () => {
+      const exp = trialExpiry();
+      setCountdown(formatCountdown(exp ? exp - Date.now() : 0));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [onTrial]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -318,13 +343,16 @@ function Assistant({ tier }: { tier: Tier }) {
       {onTrial && (
         <div className="animate-rise mb-3 flex items-center gap-3 rounded-xl border border-accent/30 bg-accent-wash px-4 py-2.5">
           <span aria-hidden className="text-lg">
-            {trialDays > 0 ? "✨" : "🔒"}
+            {countdown ? "⏳" : "🔒"}
           </span>
           <p className="flex-1 text-sm text-accent-deep">
-            {trialDays > 0 ? (
+            {countdown ? (
               <>
-                <strong>Free trial</strong> — {trialDays}{" "}
-                {trialDays === 1 ? "day" : "days"} left.
+                <strong>Free trial</strong> —{" "}
+                <span className="font-mono tabular-nums font-semibold tracking-tight">
+                  {countdown}
+                </span>{" "}
+                left
               </>
             ) : (
               <>
