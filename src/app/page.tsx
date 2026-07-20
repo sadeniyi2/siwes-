@@ -209,8 +209,15 @@ function Assistant({ tier }: { tier: Tier }) {
       }
 
       if (!res.ok || !res.body) {
-        const detail = await res.text().catch(() => "");
-        throw new Error(detail || `Request failed (${res.status})`);
+        // Server sends a clean { message } for busy/maintenance/other errors.
+        let msg = "The assistant is unavailable right now. Please try again shortly.";
+        try {
+          const j = await res.json();
+          if (j?.message) msg = j.message;
+        } catch {
+          /* keep the default friendly message */
+        }
+        throw new Error(msg);
       }
 
       const reader = res.body.getReader();
