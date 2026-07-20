@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import AccessGate from "@/components/AccessGate";
 import { deleteEntry, loadEntries, loadProfile, saveEntry } from "@/lib/store";
 import {
   LogEntry,
@@ -16,6 +17,10 @@ import {
 } from "@/lib/types";
 
 export default function LogbookPage() {
+  return <AccessGate>{<LogbookInner />}</AccessGate>;
+}
+
+function LogbookInner() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [entries, setEntries] = useState<LogEntry[]>([]);

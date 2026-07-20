@@ -3,10 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AssistantMessage, { ParsedEntry } from "@/components/AssistantMessage";
+import AccessGate from "@/components/AccessGate";
+import KeyModal from "@/components/KeyModal";
 import Toast from "@/components/Toast";
+import {
+  Tier,
+  isTrial,
+  loadAccessToken,
+  trialExpired,
+  trialExpiry,
+} from "@/lib/access";
 import {
   buildMemory,
   clearChat,
+  loadApiKey,
   loadChat,
   loadEntries,
   loadProfile,
@@ -16,10 +26,28 @@ import {
 import { ChatMessage, formatLongDate, weekNumberOf } from "@/lib/types";
 
 const QUICK_ACTIONS = [
-  { label: "Generate Weekly Summary", icon: "🗓" },
-  { label: "Generate Monthly Summary", icon: "🗂" },
-  { label: "Build Final Report", icon: "📄" },
+  { label: "Generate Weekly Summary", icon: "🗓", pro: false },
+  { label: "Generate Monthly Summary", icon: "🗂", pro: true },
+  { label: "Build Final Report", icon: "📄", pro: true },
 ];
+
+export default function AssistantPage() {
+  return <AccessGate render={(tier) => <Assistant tier={tier} />} />;
+}
+
+/** Live countdown like "2d 05h 31m 09s"; null once the trial has ended. */
+function formatCountdown(ms: number): string | null {
+  if (ms <= 0) return null;
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (d > 0) return `${d}d ${pad(h)}h ${pad(m)}m ${pad(sec)}s`;
+  if (h > 0) return `${pad(h)}h ${pad(m)}m ${pad(sec)}s`;
+  return `${pad(m)}m ${pad(sec)}s`;
+}
 
 const EXAMPLE_PROMPTS = [
   "Today I set up VS Code and Git, then my supervisor showed me the company database and I practiced writing SQL queries.",
@@ -35,7 +63,7 @@ function AssistantAvatar() {
   );
 }
 
-export default function AssistantPage() {
+function Assistant({ tier }: { tier: Tier }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -44,6 +72,13 @@ export default function AssistantPage() {
   const [lastUserText, setLastUserText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
+  const [hasKey, setHasKey] = useState(true);
+  const [keyModal, setKeyModal] = useState<
+    null | "setup" | "invalid_key" | "quota"
+  >(null);
+  const [pendingRetry, setPendingRetry] = useState<string | null>(null);
+  const [onTrial, setOnTrial] = useState(false);
+  const [countdown, setCountdown] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -57,7 +92,30 @@ export default function AssistantPage() {
     setFirstName(profile.fullName.split(/\s+/)[0]);
     setMessages(loadChat());
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
+    const sync = () => {
+      setHasKey(!!loadApiKey());
+      setOnTrial(isTrial());
+    };
+    sync();
+    window.addEventListener("siwes-key-change", sync);
+    window.addEventListener("siwes-access-change", sync);
+    return () => {
+      window.removeEventListener("siwes-key-change", sync);
+      window.removeEventListener("siwes-access-change", sync);
+    };
   }, [router]);
+
+  // Live trial countdown — ticks every second while on a trial.
+  useEffect(() => {
+    if (!onTrial) return;
+    const tick = () => {
+      const exp = trialExpiry();
+      setCountdown(formatCountdown(exp ? exp - Date.now() : 0));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [onTrial]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -73,6 +131,22 @@ export default function AssistantPage() {
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
+
+    // Trial expired? Send them to unlock instead of generating.
+    if (isTrial() && trialExpired()) {
+      setToast("Your free trial has ended — unlock to keep going.");
+      setTimeout(() => router.push("/unlock"), 900);
+      return;
+    }
+
+    // No key yet? Remember what they wanted to send and ask for a key first.
+    const key = loadApiKey();
+    if (!key) {
+      setPendingRetry(trimmed);
+      setKeyModal("setup");
+      return;
+    }
+
     setInput("");
     requestAnimationFrame(autoGrow);
     setLastUserText(trimmed);
@@ -91,7 +165,11 @@ export default function AssistantPage() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-gemini-key": key,
+          "x-access-token": loadAccessToken(),
+        },
         signal: controller.signal,
         body: JSON.stringify({
           // Send the conversation without the empty assistant placeholder
@@ -99,6 +177,36 @@ export default function AssistantPage() {
           memory: buildMemory(),
         }),
       });
+
+      // Access expired/invalid → back to the unlock page.
+      if (res.status === 402) {
+        router.replace("/unlock");
+        return;
+      }
+      // Pro-only feature attempted on Basic → nudge to upgrade.
+      if (res.status === 403) {
+        setMessages((prev) => prev.slice(0, -2));
+        setToast("That's a Pro feature — upgrade to unlock it.");
+        setTimeout(() => router.push("/unlock"), 900);
+        return;
+      }
+
+      // Auth / quota problems come back as JSON with a machine-readable reason.
+      if (res.status === 401 || res.status === 429) {
+        let reason: "invalid_key" | "quota" = "invalid_key";
+        try {
+          const j = await res.json();
+          reason = j.reason === "quota" ? "quota" : "invalid_key";
+        } catch {
+          /* ignore */
+        }
+        // Drop the empty assistant bubble, restore the input, open the modal.
+        setMessages((prev) => prev.slice(0, -2));
+        setInput(trimmed);
+        setPendingRetry(trimmed);
+        setKeyModal(reason);
+        return;
+      }
 
       if (!res.ok || !res.body) {
         const detail = await res.text().catch(() => "");
@@ -173,10 +281,25 @@ export default function AssistantPage() {
       style={{ minHeight: "calc(100dvh - 8.5rem)" }}
     >
       <Toast message={toast} onDone={() => setToast(null)} />
+      <KeyModal
+        open={keyModal !== null}
+        reason={keyModal ?? "setup"}
+        onClose={() => {
+          setKeyModal(null);
+          setHasKey(!!loadApiKey());
+          // If a key is now present and a message was waiting, send it.
+          if (loadApiKey() && pendingRetry) {
+            const t = pendingRetry;
+            setPendingRetry(null);
+            setInput("");
+            setTimeout(() => send(t), 0);
+          }
+        }}
+      />
 
       <div className="mb-3 flex items-center gap-2">
         <div className="-mx-3 flex flex-1 gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
-          {QUICK_ACTIONS.map((a) => (
+          {QUICK_ACTIONS.filter((a) => tier === "pro" || !a.pro).map((a) => (
             <button
               key={a.label}
               disabled={busy}
@@ -186,7 +309,27 @@ export default function AssistantPage() {
               <span aria-hidden>{a.icon}</span> {a.label}
             </button>
           ))}
+          {tier === "basic" && (
+            <button
+              onClick={() => router.push("/unlock")}
+              className="chip shrink-0 border-accent/40 bg-accent-wash font-semibold text-accent-dark"
+              title="Unlock monthly summaries, the final report builder, and diagrams"
+            >
+              ⭐ Upgrade to Pro
+            </button>
+          )}
         </div>
+        <button
+          onClick={() => setKeyModal("setup")}
+          title={hasKey ? "Your Gemini key is connected" : "Add your Gemini key"}
+          className={`chip shrink-0 ${
+            hasKey
+              ? "border-emerald-300 text-emerald-700"
+              : "border-margin/40 text-margin"
+          }`}
+        >
+          🔑 {hasKey ? "Key" : "Add key"}
+        </button>
         {messages.length > 0 && (
           <button
             onClick={handleClear}
@@ -196,6 +339,36 @@ export default function AssistantPage() {
           </button>
         )}
       </div>
+
+      {onTrial && (
+        <div className="animate-rise mb-3 flex items-center gap-3 rounded-xl border border-accent/30 bg-accent-wash px-4 py-2.5">
+          <span aria-hidden className="text-lg">
+            {countdown ? "⏳" : "🔒"}
+          </span>
+          <p className="flex-1 text-sm text-accent-deep">
+            {countdown ? (
+              <>
+                <strong>Free trial</strong> —{" "}
+                <span className="font-mono tabular-nums font-semibold tracking-tight">
+                  {countdown}
+                </span>{" "}
+                left
+              </>
+            ) : (
+              <>
+                <strong>Your free trial has ended.</strong> Unlock to keep using
+                the assistant.
+              </>
+            )}
+          </p>
+          <button
+            onClick={() => router.push("/unlock")}
+            className="btn shrink-0 bg-accent px-3.5 py-1.5 text-xs text-white hover:bg-accent-dark"
+          >
+            Unlock
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 space-y-4 overflow-y-auto rounded-2xl border border-ink/10 bg-paper-sheet p-4 shadow-sheet">
         {messages.length === 0 && (

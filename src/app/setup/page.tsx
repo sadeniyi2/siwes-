@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadProfile, saveProfile } from "@/lib/store";
+import { loadApiKey, loadProfile, saveApiKey, saveProfile } from "@/lib/store";
+import { loadTier, saveAccess } from "@/lib/access";
 import { Profile, dayNameFromISO, formatLongDate } from "@/lib/types";
 
 const EMPTY: Profile = {
@@ -45,7 +46,9 @@ const inputCls =
 export default function SetupPage() {
   const router = useRouter();
   const [p, setP] = useState<Profile>(EMPTY);
+  const [apiKey, setApiKey] = useState("");
   const [isEdit, setIsEdit] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,13 +57,14 @@ export default function SetupPage() {
       setP({ ...EMPTY, ...existing });
       setIsEdit(true);
     }
+    setApiKey(loadApiKey());
   }, []);
 
   function set<K extends keyof Profile>(key: K, value: Profile[K]) {
     setP((prev) => ({ ...prev, [key]: value }));
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!p.fullName.trim() || !p.firmName.trim() || !p.startDate) {
       setError("Please fill your name, your firm, and your start date.");
@@ -70,13 +74,51 @@ export default function SetupPage() {
       setError("Your start date falls on a Sunday — please double-check it.");
       return;
     }
+    const fullName = p.fullName.trim();
     saveProfile({
       ...p,
-      fullName: p.fullName.trim(),
+      fullName,
       firmName: p.firmName.trim(),
       durationWeeks: p.durationWeeks ? Number(p.durationWeeks) : undefined,
     });
-    router.push("/");
+    if (apiKey.trim()) saveApiKey(apiKey);
+
+    // Already unlocked (paid or free) → straight into the app.
+    if (loadTier()) {
+      router.push("/");
+      return;
+    }
+
+    // Free-access names skip payment entirely and go straight in.
+    setChecking(true);
+    try {
+      const res = await fetch("/api/access/free", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fullName }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.ok) {
+        saveAccess(j.token, j.tier, "free");
+        router.push("/");
+        return;
+      }
+      // Server not configured yet — tell the user instead of silently paywalling.
+      if (res.status === 500) {
+        setChecking(false);
+        setError(
+          j.message ||
+            "The app isn't fully set up yet (missing ACCESS_TOKEN_SECRET). Please contact the admin.",
+        );
+        return;
+      }
+      // 403 = not on the free list → continue to the plans page below.
+    } catch {
+      /* network issue — fall through to the plans page */
+    }
+    setChecking(false);
+    // Everyone else chooses a plan (or a free trial there).
+    router.push("/unlock");
   }
 
   return (
@@ -220,6 +262,44 @@ export default function SetupPage() {
           I also work on Saturdays
         </label>
 
+        <h2 className="mb-1 font-display text-sm font-bold uppercase tracking-widest text-accent-deep">
+          Your AI key
+        </h2>
+        <p className="mb-3 text-xs leading-relaxed text-ink-soft">
+          This app runs on your own free Google Gemini key, so your usage is
+          yours alone and stays private to this browser. Get one free (no card)
+          at{" "}
+          <a
+            href="https://aistudio.google.com/apikey"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-accent underline underline-offset-2"
+          >
+            aistudio.google.com/apikey
+          </a>
+          . You can also add it later.{" "}
+          <a
+            href="/SIWES-Logbook-Assistant-Guide.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-accent underline underline-offset-2"
+          >
+            Download the step-by-step guide (PDF)
+          </a>
+          .
+        </p>
+        <div className="mb-6">
+          <Field label="Gemini API key">
+            <input
+              type="password"
+              className={inputCls}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="AIza…"
+            />
+          </Field>
+        </div>
+
         {error && (
           <p className="animate-rise mb-4 rounded-xl border border-margin/30 bg-margin/10 px-4 py-2.5 text-sm text-margin">
             {error}
@@ -227,8 +307,12 @@ export default function SetupPage() {
         )}
 
         <div className="flex items-center gap-3">
-          <button type="submit" className="btn-primary">
-            {isEdit ? "Save changes" : "Start my logbook →"}
+          <button type="submit" disabled={checking} className="btn-primary disabled:opacity-60">
+            {checking
+              ? "Checking access…"
+              : isEdit
+                ? "Save changes"
+                : "Continue →"}
           </button>
           {isEdit && (
             <button
