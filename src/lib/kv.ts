@@ -1,38 +1,40 @@
 import "server-only";
 
-// Lightweight Upstash Redis REST client (no SDK) for the founder panel.
-// Configure with UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (both free
-// from upstash.com). If unset, tracking silently no-ops and the panel shows a
-// "connect a store" note — sales still work from Flutterwave.
+// User/trial tracking for the founder panel, backed by Supabase (free Postgres).
+// Configure with SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY. The service-role key
+// is used ONLY here in server routes (never sent to the browser). If unset,
+// tracking silently no-ops and the panel shows a "connect a store" note —
+// sales still work from Flutterwave.
+//
+// One-time table setup (run in Supabase → SQL editor):
+//   create table if not exists siwes_users (
+//     id text primary key,
+//     name text, email text, firm text,
+//     kind text, tier text,
+//     trial_exp bigint,
+//     first_seen bigint, last_seen bigint
+//   );
 
-const URL_ = process.env.UPSTASH_REDIS_REST_URL || "";
-const TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || "";
+const SB_URL = process.env.SUPABASE_URL || "";
+const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const TABLE = "siwes_users";
 
 export function kvConfigured(): boolean {
-  return !!URL_ && !!TOKEN;
+  return !!SB_URL && !!SB_KEY;
 }
 
-async function cmd<T = unknown>(command: (string | number)[]): Promise<T | null> {
-  if (!kvConfigured()) return null;
-  try {
-    const res = await fetch(URL_, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(command),
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return (json?.result ?? null) as T;
-  } catch {
-    return null;
-  }
+function sb(path: string, init: RequestInit): Promise<Response> {
+  return fetch(`${SB_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: SB_KEY,
+      Authorization: `Bearer ${SB_KEY}`,
+      "Content-Type": "application/json",
+      ...(init.headers || {}),
+    },
+    cache: "no-store",
+  });
 }
-
-const USERS_KEY = "siwes:users";
 
 export interface UserRecord {
   id: string;
@@ -46,46 +48,84 @@ export interface UserRecord {
   lastSeen: number;
 }
 
-/** Upsert a user record (merge with any existing one). */
+interface Row {
+  id: string;
+  name: string | null;
+  email: string | null;
+  firm: string | null;
+  kind: string | null;
+  tier: string | null;
+  trial_exp: number | null;
+  first_seen: number | null;
+  last_seen: number | null;
+}
+
+/** Upsert a user record (read existing, merge, write). */
 export async function upsertUser(
   id: string,
   patch: Partial<UserRecord>,
 ): Promise<void> {
   if (!kvConfigured() || !id) return;
-  const existingRaw = await cmd<string>(["HGET", USERS_KEY, id]);
-  let existing: UserRecord | null = null;
-  if (existingRaw) {
-    try {
-      existing = JSON.parse(existingRaw) as UserRecord;
-    } catch {
-      existing = null;
+
+  let existing: Row | null = null;
+  try {
+    const r = await sb(
+      `${TABLE}?id=eq.${encodeURIComponent(id)}&select=*`,
+      { method: "GET" },
+    );
+    if (r.ok) {
+      const rows = (await r.json()) as Row[];
+      existing = rows?.[0] ?? null;
     }
+  } catch {
+    /* ignore */
   }
+
   const now = Date.now();
-  const merged: UserRecord = {
+  const row: Row = {
     id,
-    firstSeen: existing?.firstSeen ?? now,
-    lastSeen: now,
-    name: patch.name ?? existing?.name,
-    email: patch.email ?? existing?.email,
-    firm: patch.firm ?? existing?.firm,
-    kind: patch.kind ?? existing?.kind,
-    tier: patch.tier ?? existing?.tier,
-    trialExp: patch.trialExp ?? existing?.trialExp,
+    first_seen: existing?.first_seen ?? now,
+    last_seen: now,
+    name: patch.name ?? existing?.name ?? null,
+    email: patch.email ?? existing?.email ?? null,
+    firm: patch.firm ?? existing?.firm ?? null,
+    kind: patch.kind ?? existing?.kind ?? null,
+    tier: patch.tier ?? existing?.tier ?? null,
+    trial_exp: patch.trialExp ?? existing?.trial_exp ?? null,
   };
-  await cmd(["HSET", USERS_KEY, id, JSON.stringify(merged)]);
+
+  try {
+    await sb(TABLE, {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify(row),
+    });
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
-  const flat = await cmd<string[]>(["HGETALL", USERS_KEY]);
-  if (!flat || !Array.isArray(flat)) return [];
-  const out: UserRecord[] = [];
-  for (let i = 0; i < flat.length; i += 2) {
-    try {
-      out.push(JSON.parse(flat[i + 1]) as UserRecord);
-    } catch {
-      /* skip bad rows */
-    }
+  if (!kvConfigured()) return [];
+  try {
+    const r = await sb(
+      `${TABLE}?select=*&order=last_seen.desc&limit=2000`,
+      { method: "GET" },
+    );
+    if (!r.ok) return [];
+    const rows = (await r.json()) as Row[];
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name ?? undefined,
+      email: row.email ?? undefined,
+      firm: row.firm ?? undefined,
+      kind: row.kind ?? undefined,
+      tier: row.tier ?? undefined,
+      trialExp: row.trial_exp ?? undefined,
+      firstSeen: row.first_seen ?? 0,
+      lastSeen: row.last_seen ?? 0,
+    }));
+  } catch {
+    return [];
   }
-  return out;
 }
