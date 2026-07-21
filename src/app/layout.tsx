@@ -3,7 +3,11 @@ import Link from "next/link";
 import { Fraunces, Instrument_Sans } from "next/font/google";
 import HeaderMeta from "@/components/HeaderMeta";
 import Nav from "@/components/Nav";
+import TutorialTab from "@/components/TutorialTab";
 import "./globals.css";
+
+// Runs before first paint so the correct theme is applied with no flash.
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('siwes.theme');if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
 
 const display = Fraunces({
   subsets: ["latin"],
@@ -26,7 +30,14 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable}`}>
+    <html
+      lang="en"
+      className={`${display.variable} ${body.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-screen font-sans text-ink antialiased">
         <header className="sticky top-0 z-20 border-b border-ink/10 bg-paper-sheet/90 backdrop-blur print:hidden">
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
@@ -47,6 +58,7 @@ export default function RootLayout({
         <main className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
           {children}
         </main>
+        <TutorialTab />
         <footer className="mx-auto max-w-5xl px-4 py-6 text-center text-xs text-ink-faint print:hidden">
           <Link href="/terms" className="hover:text-accent hover:underline">
             Terms of Use

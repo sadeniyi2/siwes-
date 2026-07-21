@@ -185,7 +185,7 @@ export default function Tour({
             {index > 0 && (
               <button
                 onClick={() => setIndex((v) => v - 1)}
-                className="btn border border-ink/15 bg-white px-3 py-1.5 text-xs text-ink-soft"
+                className="btn border border-ink/15 bg-paper-sheet px-3 py-1.5 text-xs text-ink-soft"
               >
                 Back
               </button>

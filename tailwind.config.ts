@@ -5,24 +5,28 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Colours are driven by CSS variables (space-separated RGB channels) so
+        // the whole app can switch between light and dark themes. The
+        // `<alpha-value>` placeholder keeps Tailwind opacity modifiers working
+        // (e.g. `border-ink/10`, `bg-ink/30`).
         ink: {
-          DEFAULT: "#1c2434",
-          soft: "#46506b",
-          faint: "#8b93a9",
+          DEFAULT: "rgb(var(--c-ink) / <alpha-value>)",
+          soft: "rgb(var(--c-ink-soft) / <alpha-value>)",
+          faint: "rgb(var(--c-ink-faint) / <alpha-value>)",
         },
         paper: {
-          DEFAULT: "#f4f1ea",
-          sheet: "#fdfcf7",
-          line: "#e5e0d3",
+          DEFAULT: "rgb(var(--c-paper) / <alpha-value>)",
+          sheet: "rgb(var(--c-paper-sheet) / <alpha-value>)",
+          line: "rgb(var(--c-paper-line) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "#2b4eda",
-          dark: "#1e3aad",
-          deep: "#16296e",
-          soft: "#e6ebfc",
-          wash: "#f2f5fe",
+          DEFAULT: "rgb(var(--c-accent) / <alpha-value>)",
+          dark: "rgb(var(--c-accent-dark) / <alpha-value>)",
+          deep: "rgb(var(--c-accent-deep) / <alpha-value>)",
+          soft: "rgb(var(--c-accent-soft) / <alpha-value>)",
+          wash: "rgb(var(--c-accent-wash) / <alpha-value>)",
         },
-        margin: "#e0656b",
+        margin: "rgb(var(--c-margin) / <alpha-value>)",
       },
       fontFamily: {
         display: ["var(--font-display)", "Georgia", "serif"],
@@ -76,6 +80,10 @@ const config: Config = {
         "ink-fill": {
           from: { width: "0%" },
         },
+        "nudge-x": {
+          "0%, 100%": { transform: "translateX(0)" },
+          "50%": { transform: "translateX(-3px)" },
+        },
       },
       animation: {
         rise: "rise 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) both",
@@ -87,6 +95,7 @@ const config: Config = {
         "page-turn": "page-turn 0.5s cubic-bezier(0.21, 1.02, 0.73, 1) both",
         "toast-in": "toast-in 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) both",
         "ink-fill": "ink-fill 0.8s cubic-bezier(0.21, 1.02, 0.73, 1) both",
+        "nudge-x": "nudge-x 1.4s ease-in-out infinite",
       },
     },
   },

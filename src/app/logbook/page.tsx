@@ -260,7 +260,7 @@ function LogbookInner() {
                           onChange={(e) => setDraft(e.target.value)}
                           rows={4}
                           autoFocus
-                          className="w-full rounded-lg border border-accent bg-white p-2 font-book text-sm outline-none ring-4 ring-accent-soft"
+                          className="w-full rounded-lg border border-accent bg-paper-sheet p-2 font-book text-sm outline-none ring-4 ring-accent-soft"
                         />
                         <div className="mt-1 flex items-center gap-2">
                           <button
@@ -271,7 +271,7 @@ function LogbookInner() {
                           </button>
                           <button
                             onClick={() => setEditingDate(null)}
-                            className="btn border border-ink/20 bg-white px-3 py-1 text-xs text-ink-soft"
+                            className="btn border border-ink/20 bg-paper-sheet px-3 py-1 text-xs text-ink-soft"
                           >
                             Cancel
                           </button>
@@ -300,7 +300,7 @@ function LogbookInner() {
                         </p>
                         <button
                           onClick={() => startEdit(date)}
-                          className="absolute right-2 top-2 hidden rounded-md border border-ink/15 bg-white px-2 py-0.5 text-xs text-ink-soft shadow-card transition-colors hover:border-accent/50 hover:text-accent-dark group-hover:block print:!hidden"
+                          className="absolute right-2 top-2 hidden rounded-md border border-ink/15 bg-paper-sheet px-2 py-0.5 text-xs text-ink-soft shadow-card transition-colors hover:border-accent/50 hover:text-accent-dark group-hover:block print:!hidden"
                         >
                           {entry ? "Edit" : "Add"}
                         </button>

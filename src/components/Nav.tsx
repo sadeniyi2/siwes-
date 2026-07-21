@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const LINKS = [
   { href: "/", label: "Assistant" },
@@ -56,7 +57,11 @@ export default function Nav() {
         >
           ?
         </button>
+        <ThemeToggle className="h-7 w-7 text-ink-faint" />
       </nav>
+
+      {/* Mobile: theme toggle sits beside the hamburger, always reachable */}
+      <ThemeToggle className="h-10 w-10 border border-ink/10 bg-paper text-ink-soft hover:border-accent/40 sm:hidden" />
 
       {/* Mobile: hamburger (stack lines) button */}
       <button
