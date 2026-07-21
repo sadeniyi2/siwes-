@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile } from "@/lib/store";
-import { PLANS, TRIAL_DAYS, Tier, loadTier, saveAccess, saveTrial } from "@/lib/access";
+import { PLANS, TRIAL_DAYS, Tier, loadTier, saveAccess, saveTrial, trialUsed } from "@/lib/access";
 import Tour, { TourStep } from "@/components/Tour";
 
 const UNLOCK_TOUR: TourStep[] = [
@@ -87,6 +87,9 @@ export default function UnlockPage() {
   const [paying, setPaying] = useState<Tier | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentTier, setCurrentTier] = useState<Tier | null>(null);
+  const [code, setCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [showEnded, setShowEnded] = useState(false);
 
   // Preload the payment script as soon as the page opens.
   useEffect(() => {
@@ -123,6 +126,7 @@ export default function UnlockPage() {
       if (!loadTier()) claimFreeSilently(p.fullName);
     }
     setCurrentTier(loadTier());
+    setShowEnded(trialUsed() && !loadTier());
   }, [claimFreeSilently]);
 
   async function verify(transactionId: string | number) {
@@ -139,6 +143,30 @@ export default function UnlockPage() {
     }
     saveAccess(j.token, j.tier, "paid");
     router.replace("/");
+  }
+
+  async function redeem() {
+    if (!code.trim()) return;
+    setError(null);
+    setRedeeming(true);
+    try {
+      const res = await fetch("/api/access/referral", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, name, email }),
+      });
+      const j = await res.json();
+      if (res.ok && j.ok) {
+        saveAccess(j.token, j.tier, "free");
+        router.replace("/");
+        return;
+      }
+      setError(j.message || "That code isn't valid.");
+    } catch {
+      setError("Couldn't check that code right now. Please try again.");
+    } finally {
+      setRedeeming(false);
+    }
   }
 
   const [trialBusy, setTrialBusy] = useState(false);
@@ -223,7 +251,31 @@ export default function UnlockPage() {
         </p>
       </div>
 
-      {!currentTier && (
+      {showEnded && (
+        <div className="animate-rise mb-5 flex flex-col items-center gap-3 rounded-2xl border-2 border-margin/40 bg-margin/10 p-5 text-center sm:flex-row sm:text-left">
+          <span className="text-3xl" aria-hidden>
+            ⌛
+          </span>
+          <div className="flex-1">
+            <p className="font-display text-base font-semibold text-margin">
+              Your free trial has ended
+            </p>
+            <p className="text-sm text-ink-soft">
+              Your logbook entries are safe. Choose a plan below to keep writing
+              entries, summaries and your final report — it&apos;s a one-time
+              payment for the whole placement.
+            </p>
+          </div>
+          <a
+            href="#plans"
+            className="btn-primary shrink-0"
+          >
+            See plans ↓
+          </a>
+        </div>
+      )}
+
+      {!currentTier && !showEnded && (
         <div className="animate-rise mb-5 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-accent/40 bg-accent-wash p-5 text-center sm:flex-row sm:text-left">
           <span className="text-3xl" aria-hidden>
             ✨
@@ -274,6 +326,33 @@ export default function UnlockPage() {
             />
           </label>
         </div>
+        <label className="mt-3 block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
+            Access code <span className="font-normal normal-case tracking-normal text-ink-faint">(optional)</span>
+          </span>
+          <div className="flex gap-2">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  redeem();
+                }
+              }}
+              placeholder="Have a code? Enter it here"
+              className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm shadow-card outline-none focus:border-accent focus:shadow-glow"
+            />
+            <button
+              type="button"
+              onClick={redeem}
+              disabled={redeeming || !code.trim()}
+              className="btn shrink-0 border border-ink/15 bg-paper-sheet px-4 text-ink-soft hover:border-accent/50 hover:text-accent-dark disabled:opacity-50"
+            >
+              {redeeming ? "Checking…" : "Apply"}
+            </button>
+          </div>
+        </label>
       </div>
 
       {error && (
@@ -282,7 +361,7 @@ export default function UnlockPage() {
         </p>
       )}
 
-      <div data-tour="plans" className="grid items-start gap-4 sm:grid-cols-2">
+      <div id="plans" data-tour="plans" className="grid items-start gap-4 sm:grid-cols-2">
         {(["basic", "pro"] as Tier[]).map((id) => {
           const plan = PLANS[id];
           const isPro = id === "pro";

@@ -7,6 +7,15 @@ import AccessGate from "@/components/AccessGate";
 import KeyModal from "@/components/KeyModal";
 import Toast from "@/components/Toast";
 import Tour, { TourStep } from "@/components/Tour";
+import OnboardingProgress from "@/components/OnboardingProgress";
+import ProInsights from "@/components/ProInsights";
+import VoiceInput from "@/components/VoiceInput";
+import WritingPrefs, {
+  DEFAULT_PREFS,
+  Prefs,
+  loadPrefs,
+  prefsDirective,
+} from "@/components/WritingPrefs";
 import {
   Tier,
   isTrial,
@@ -30,6 +39,10 @@ const QUICK_ACTIONS = [
   { label: "Generate Weekly Summary", icon: "🗓", pro: false },
   { label: "Generate Monthly Summary", icon: "🗂", pro: true },
   { label: "Build Final Report", icon: "📄", pro: true },
+  { label: "Improve my last entry", icon: "✨", pro: true },
+  { label: "Generate Table of Contents", icon: "🔖", pro: true },
+  { label: "Summarize skills gained", icon: "🏷", pro: true },
+  { label: "Suggest a diagram", icon: "📊", pro: true },
 ];
 
 export default function AssistantPage() {
@@ -103,6 +116,7 @@ function Assistant({ tier }: { tier: Tier }) {
   const [pendingRetry, setPendingRetry] = useState<string | null>(null);
   const [onTrial, setOnTrial] = useState(false);
   const [countdown, setCountdown] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const bottomRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -117,16 +131,23 @@ function Assistant({ tier }: { tier: Tier }) {
     setFirstName(profile.fullName.split(/\s+/)[0]);
     setMessages(loadChat());
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
+    setPrefs(loadPrefs());
     const sync = () => {
       setHasKey(!!loadApiKey());
       setOnTrial(isTrial());
     };
     sync();
+    const openKey = () => setKeyModal("setup");
+    const focusComposer = () => textareaRef.current?.focus();
     window.addEventListener("siwes-key-change", sync);
     window.addEventListener("siwes-access-change", sync);
+    window.addEventListener("siwes-open-key", openKey);
+    window.addEventListener("siwes-focus-composer", focusComposer);
     return () => {
       window.removeEventListener("siwes-key-change", sync);
       window.removeEventListener("siwes-access-change", sync);
+      window.removeEventListener("siwes-open-key", openKey);
+      window.removeEventListener("siwes-focus-composer", focusComposer);
     };
   }, [router]);
 
@@ -202,7 +223,13 @@ function Assistant({ tier }: { tier: Tier }) {
         body: JSON.stringify({
           // Send the conversation without the empty assistant placeholder
           messages: history.slice(0, -1).slice(-20),
-          memory: buildMemory(),
+          memory: (() => {
+            const base = buildMemory();
+            const dir = tier === "pro" ? prefsDirective(prefs) : "";
+            return dir
+              ? `${base}\n\n<writing_preferences>\n${dir}\n</writing_preferences>`
+              : base;
+          })(),
         }),
       });
 
@@ -296,6 +323,7 @@ function Assistant({ tier }: { tier: Tier }) {
       savedAt: new Date().toISOString(),
     });
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
+    window.dispatchEvent(new Event("siwes-entry-saved"));
     const profile = loadProfile();
     const week = profile ? weekNumberOf(entry.date, profile.startDate) : 1;
     setToast(
@@ -333,6 +361,9 @@ function Assistant({ tier }: { tier: Tier }) {
         }}
       />
 
+      <OnboardingProgress />
+      {tier === "pro" && <ProInsights />}
+
       <div className="mb-3 flex items-center gap-2">
         <div data-tour="actions" className="-mx-3 flex flex-1 gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
           {QUICK_ACTIONS.filter((a) => tier === "pro" || !a.pro).map((a) => (
@@ -355,6 +386,7 @@ function Assistant({ tier }: { tier: Tier }) {
             </button>
           )}
         </div>
+        {tier === "pro" && <WritingPrefs value={prefs} onChange={setPrefs} />}
         <button
           data-tour="key"
           onClick={() => setKeyModal("setup")}
@@ -506,6 +538,15 @@ function Assistant({ tier }: { tier: Tier }) {
           placeholder="Describe your day…"
           className="min-w-0 flex-1 resize-none rounded-2xl border border-ink/15 bg-paper-sheet px-4 py-3 text-base shadow-card outline-none transition-all duration-200 focus:border-accent focus:shadow-glow sm:text-sm"
         />
+        {tier === "pro" && !busy && (
+          <VoiceInput
+            onText={(t) => {
+              setInput((prev) => (prev ? `${prev} ${t}` : t));
+              requestAnimationFrame(autoGrow);
+              textareaRef.current?.focus();
+            }}
+          />
+        )}
         {busy ? (
           <button
             type="button"

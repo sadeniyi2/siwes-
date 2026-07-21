@@ -14,6 +14,10 @@ const TOKEN_KEY = "siwes.access.token.v1";
 const TIER_KEY = "siwes.access.tier.v1";
 const KIND_KEY = "siwes.access.kind.v1";
 const TRIAL_EXP_KEY = "siwes.trial.exp.v1";
+// Persistent marker that a trial was ever started — survives clearAccess so a
+// used-up trial can't be restarted, and /unlock can show the "trial ended"
+// screen instead of offering another trial.
+const TRIAL_USED_KEY = "siwes.trial.used.v1";
 
 export function loadAccessToken(): string {
   if (typeof window === "undefined") return "";
@@ -46,7 +50,14 @@ export function saveAccess(token: string, tier: Tier, kind: Kind = "paid") {
 /** Start a trial: store the trial token and its expiry time. */
 export function saveTrial(token: string, exp: number) {
   localStorage.setItem(TRIAL_EXP_KEY, String(exp));
+  localStorage.setItem(TRIAL_USED_KEY, "1");
   saveAccess(token, "basic", "trial");
+}
+
+/** True once a trial has ever been started on this browser. */
+export function trialUsed(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(TRIAL_USED_KEY) === "1";
 }
 
 export function trialExpiry(): number | null {

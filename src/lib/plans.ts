@@ -51,6 +51,10 @@ export const PLANS: Record<Tier, PlanInfo> = {
 export const PRO_TRIGGERS = [
   "generate monthly summary",
   "build final report",
+  "generate table of contents",
+  "summarize skills gained",
+  "suggest a diagram",
+  "improve my last entry",
   "generate chart",
   "generate graph",
   "generate workflow",

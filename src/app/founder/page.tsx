@@ -24,6 +24,13 @@ interface UserRow {
   firstSeen: number;
   lastSeen: number;
 }
+interface CodeRow {
+  code: string;
+  tier: string;
+  note?: string;
+  uses: number;
+  created: number;
+}
 interface Data {
   admin: string;
   stats: {
@@ -79,7 +86,7 @@ export default function FounderPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<Data | null>(null);
-  const [tab, setTab] = useState<"sales" | "users">("sales");
+  const [tab, setTab] = useState<"sales" | "users" | "codes">("sales");
 
   useEffect(() => {
     setToken(localStorage.getItem(TOKEN_KEY));
@@ -140,6 +147,55 @@ export default function FounderPage() {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setData(null);
+  }
+
+  // ---- Referral codes ----
+  const [codes, setCodes] = useState<CodeRow[] | null>(null);
+  const [newCode, setNewCode] = useState("");
+  const [newNote, setNewNote] = useState("");
+  const [codeMsg, setCodeMsg] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const codesApi = useCallback(
+    async (payload: Record<string, unknown>) => {
+      if (!token) return;
+      setCodeMsg(null);
+      try {
+        const res = await fetch("/api/founder/codes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-founder-token": token },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        if (j.ok) setCodes(j.codes);
+        else setCodeMsg(j.message || "Something went wrong.");
+      } catch {
+        setCodeMsg("Network error. Please try again.");
+      }
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    if (token && tab === "codes" && codes === null) codesApi({ action: "list" });
+  }, [token, tab, codes, codesApi]);
+
+  function randomCode() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let s = "";
+    for (let i = 0; i < 6; i++)
+      s += chars[Math.floor(Math.random() * chars.length)];
+    setNewCode("SIWES-" + s);
+  }
+
+  async function copyCode(c: string) {
+    try {
+      await navigator.clipboard.writeText(c);
+      setCopied(c);
+      setTimeout(() => setCopied((v) => (v === c ? null : v)), 1500);
+    } catch {
+      /* ignore */
+    }
   }
 
   // ---- Login screen ----
@@ -234,7 +290,7 @@ export default function FounderPage() {
           )}
 
           <div className="mb-3 flex gap-1 rounded-full border border-ink/10 bg-paper p-1 text-sm w-fit">
-            {(["sales", "users"] as const).map((t) => (
+            {(["sales", "users", "codes"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -242,11 +298,12 @@ export default function FounderPage() {
                   tab === t ? "bg-accent text-white shadow-lift" : "text-ink-soft"
                 }`}
               >
-                {t === "sales" ? "Sales" : "Users & trials"}
+                {t === "sales" ? "Sales" : t === "users" ? "Users & trials" : "Free codes"}
               </button>
             ))}
           </div>
 
+          {tab !== "codes" && (
           <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-paper-sheet shadow-card">
             {tab === "sales" ? (
               <table className="w-full min-w-[560px] text-sm">
@@ -285,7 +342,7 @@ export default function FounderPage() {
                   ))}
                 </tbody>
               </table>
-            ) : (
+            ) : tab === "users" ? (
               <table className="w-full min-w-[620px] text-sm">
                 <thead>
                   <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
@@ -345,8 +402,143 @@ export default function FounderPage() {
                   })}
                 </tbody>
               </table>
-            )}
+            ) : null}
           </div>
+          )}
+
+          {tab === "codes" && (
+            <div className="rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-card">
+              <h2 className="font-display text-base font-semibold">
+                Free access codes
+              </h2>
+              <p className="mb-4 mt-0.5 text-sm text-ink-soft">
+                Share a code with anyone you want to give free access. They enter
+                it in the <span className="font-medium">Access code</span> box on
+                signup (or on their profile) and get in — no payment. The box
+                never says &quot;free&quot;.
+              </p>
+
+              {!data.tracking && (
+                <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+                  Connect Supabase (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) and
+                  create the{" "}
+                  <code className="rounded bg-paper-sheet px-1">siwes_codes</code>{" "}
+                  table to create codes here. Codes set in the REFERRAL_CODES env
+                  var still work and show below.
+                </p>
+              )}
+
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={newCode}
+                  onChange={(e) => setNewCode(e.target.value.toUpperCase())}
+                  placeholder="CODE (e.g. SIWES-AB12CD)"
+                  className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <input
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  placeholder="Note (who it's for) — optional"
+                  className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <button
+                  onClick={randomCode}
+                  className="btn-ghost shrink-0"
+                  type="button"
+                >
+                  🎲 Generate
+                </button>
+                <button
+                  onClick={() => {
+                    const c = newCode.trim();
+                    if (!c) return;
+                    codesApi({ action: "add", code: c, tier: "pro", note: newNote });
+                    setNewCode("");
+                    setNewNote("");
+                  }}
+                  disabled={!newCode.trim() || !data.tracking}
+                  className="btn-primary shrink-0 disabled:opacity-50"
+                  type="button"
+                >
+                  Create code
+                </button>
+              </div>
+
+              {codeMsg && (
+                <p className="mb-3 rounded-xl border border-margin/30 bg-margin/10 px-3 py-2 text-sm text-margin">
+                  {codeMsg}
+                </p>
+              )}
+
+              <div className="overflow-x-auto rounded-xl border border-ink/10">
+                <table className="w-full min-w-[520px] text-sm">
+                  <thead>
+                    <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
+                      <th className="px-4 py-3">Code</th>
+                      <th className="px-4 py-3">Grants</th>
+                      <th className="px-4 py-3">Used</th>
+                      <th className="px-4 py-3">Note</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {codes === null && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                          Loading…
+                        </td>
+                      </tr>
+                    )}
+                    {codes?.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                          No codes yet. Create one above.
+                        </td>
+                      </tr>
+                    )}
+                    {codes?.map((c) => {
+                      const fromEnv = c.created === 0;
+                      return (
+                        <tr key={c.code} className="border-b border-ink/5">
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => copyCode(c.code)}
+                              title="Click to copy"
+                              className="font-mono font-semibold text-accent-dark hover:underline"
+                            >
+                              {c.code}
+                            </button>
+                            {copied === c.code && (
+                              <span className="ml-2 text-xs text-emerald-600">
+                                copied ✓
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 capitalize">{c.tier}</td>
+                          <td className="px-4 py-3 text-ink-soft">{c.uses}×</td>
+                          <td className="px-4 py-3 text-ink-faint">
+                            {fromEnv ? "from environment" : c.note || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {!fromEnv && (
+                              <button
+                                onClick={() =>
+                                  codesApi({ action: "delete", code: c.code })
+                                }
+                                className="text-xs font-medium text-margin hover:underline"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <p className="mt-4 text-center text-xs text-ink-faint">
             Auto-refreshes every 20 seconds.

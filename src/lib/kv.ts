@@ -14,10 +14,18 @@ import "server-only";
 //     trial_exp bigint,
 //     first_seen bigint, last_seen bigint
 //   );
+//   create table if not exists siwes_codes (
+//     code text primary key,
+//     tier text default 'pro',
+//     note text,
+//     uses bigint default 0,
+//     created bigint
+//   );
 
 const SB_URL = process.env.SUPABASE_URL || "";
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const TABLE = "siwes_users";
+const CODES = "siwes_codes";
 
 export function kvConfigured(): boolean {
   return !!SB_URL && !!SB_KEY;
@@ -102,6 +110,137 @@ export async function upsertUser(
     });
   } catch {
     /* ignore */
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Referral / access codes. A valid code grants free Pro access. Codes can be
+// managed from the Founder Panel (stored in Supabase) and/or set permanently
+// via the REFERRAL_CODES env var (comma/semicolon separated). Codes are matched
+// case-insensitively.
+// ---------------------------------------------------------------------------
+
+export interface CodeRecord {
+  code: string;
+  tier: string; // basic | pro (defaults to pro)
+  note?: string;
+  uses: number;
+  created: number;
+}
+
+interface CodeRow {
+  code: string;
+  tier: string | null;
+  note: string | null;
+  uses: number | null;
+  created: number | null;
+}
+
+function envCodes(): string[] {
+  return (process.env.REFERRAL_CODES || "")
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Validate a code. Returns the tier it grants, or null if invalid.
+ *  Checks the env list first, then Supabase. Best-effort increments the
+ *  usage counter for Supabase-stored codes. */
+export async function validateCode(
+  input: string,
+): Promise<{ tier: "basic" | "pro" } | null> {
+  const code = input.trim();
+  if (!code) return null;
+  const lower = code.toLowerCase();
+
+  // Env-var codes always grant Pro.
+  if (envCodes().some((c) => c.toLowerCase() === lower)) {
+    return { tier: "pro" };
+  }
+
+  if (!kvConfigured()) return null;
+  try {
+    const r = await sb(
+      `${CODES}?code=eq.${encodeURIComponent(code)}&select=*`,
+      { method: "GET" },
+    );
+    if (!r.ok) return null;
+    const rows = (await r.json()) as CodeRow[];
+    const row = rows?.[0];
+    if (!row) return null;
+    // Bump usage counter (best-effort).
+    void sb(`${CODES}?code=eq.${encodeURIComponent(code)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ uses: (row.uses ?? 0) + 1 }),
+    }).catch(() => {});
+    const tier = row.tier === "basic" ? "basic" : "pro";
+    return { tier };
+  } catch {
+    return null;
+  }
+}
+
+export async function listCodes(): Promise<CodeRecord[]> {
+  const env: CodeRecord[] = envCodes().map((code) => ({
+    code,
+    tier: "pro",
+    note: "from environment (permanent)",
+    uses: 0,
+    created: 0,
+  }));
+  if (!kvConfigured()) return env;
+  try {
+    const r = await sb(`${CODES}?select=*&order=created.desc&limit=500`, {
+      method: "GET",
+    });
+    if (!r.ok) return env;
+    const rows = (await r.json()) as CodeRow[];
+    const stored = rows.map((row) => ({
+      code: row.code,
+      tier: row.tier === "basic" ? "basic" : "pro",
+      note: row.note ?? undefined,
+      uses: row.uses ?? 0,
+      created: row.created ?? 0,
+    }));
+    return [...stored, ...env];
+  } catch {
+    return env;
+  }
+}
+
+export async function addCode(
+  code: string,
+  tier: "basic" | "pro",
+  note?: string,
+): Promise<boolean> {
+  if (!kvConfigured() || !code.trim()) return false;
+  try {
+    const r = await sb(CODES, {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({
+        code: code.trim(),
+        tier,
+        note: note?.trim() || null,
+        uses: 0,
+        created: Date.now(),
+      }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteCode(code: string): Promise<boolean> {
+  if (!kvConfigured() || !code.trim()) return false;
+  try {
+    const r = await sb(`${CODES}?code=eq.${encodeURIComponent(code.trim())}`, {
+      method: "DELETE",
+    });
+    return r.ok;
+  } catch {
+    return false;
   }
 }
 
