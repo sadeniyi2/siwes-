@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AccessGate from "@/components/AccessGate";
 import Tour, { TourStep } from "@/components/Tour";
 import { deleteEntry, loadEntries, loadProfile, saveEntry } from "@/lib/store";
+import { exportLogbookDocx } from "@/lib/docx";
+import { compressImage } from "@/lib/image";
+import { loadTier, Tier } from "@/lib/access";
 import {
   LogEntry,
   Profile,
@@ -42,13 +45,21 @@ export default function LogbookPage() {
 function LogbookInner() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [tier, setTier] = useState<Tier | null>(null);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [weekStart, setWeekStart] = useState<string>("");
   const [section, setSection] = useState("");
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [draftPhotos, setDraftPhotos] = useState<string[]>([]);
+  const [draftSkills, setDraftSkills] = useState<string[]>([]);
+  const [skillInput, setSkillInput] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [printSheets, setPrintSheets] = useState<string[] | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [docxBusy, setDocxBusy] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const p = loadProfile();
@@ -57,6 +68,7 @@ function LogbookInner() {
       return;
     }
     setProfile(p);
+    setTier(loadTier());
     setEntries(loadEntries());
     const firstMonday = mondayOf(p.startDate);
     const today = new Date().toISOString().slice(0, 10);
@@ -91,20 +103,34 @@ function LogbookInner() {
   const totalWeeks = profile.durationWeeks ?? 24;
 
   function startEdit(date: string) {
+    const existing = byDate.get(date);
     setEditingDate(date);
-    setDraft(byDate.get(date)?.description ?? "");
+    setDraft(existing?.description ?? "");
+    setDraftPhotos(existing?.photos ?? []);
+    setDraftSkills(existing?.skills ?? []);
+    setSkillInput("");
   }
 
   function commitEdit(date: string) {
     const text = draft.trim();
-    if (text) {
-      saveEntry({
-        date,
-        day: dayNameFromISO(date),
-        description: text,
-        rawNotes: byDate.get(date)?.rawNotes,
-        savedAt: new Date().toISOString(),
-      });
+    const hasContent = text || draftPhotos.length > 0 || draftSkills.length > 0;
+    if (hasContent) {
+      try {
+        saveEntry({
+          date,
+          day: dayNameFromISO(date),
+          description: text,
+          rawNotes: byDate.get(date)?.rawNotes,
+          photos: draftPhotos.length ? draftPhotos : undefined,
+          skills: draftSkills.length ? draftSkills : undefined,
+          savedAt: new Date().toISOString(),
+        });
+      } catch {
+        alert(
+          "Your browser storage is full — remove a photo or two and try again. Photos take the most space.",
+        );
+        return;
+      }
     } else if (byDate.has(date)) {
       if (!confirm("Remove this entry?")) {
         setEditingDate(null);
@@ -114,6 +140,42 @@ function LogbookInner() {
     }
     setEntries(loadEntries());
     setEditingDate(null);
+  }
+
+  async function addPhotos(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setPhotoBusy(true);
+    const added: string[] = [];
+    for (const file of Array.from(files)) {
+      try {
+        added.push(await compressImage(file));
+      } catch {
+        /* skip a file that isn't a valid image */
+      }
+    }
+    setDraftPhotos((prev) => [...prev, ...added]);
+    setPhotoBusy(false);
+  }
+
+  function addSkill() {
+    const s = skillInput.trim().replace(/,$/, "").trim();
+    if (!s) return;
+    setDraftSkills((prev) =>
+      prev.some((x) => x.toLowerCase() === s.toLowerCase()) ? prev : [...prev, s],
+    );
+    setSkillInput("");
+  }
+
+  async function exportWord() {
+    if (!profile) return;
+    setDocxBusy(true);
+    try {
+      await exportLogbookDocx(profile, entries);
+    } catch {
+      alert("Sorry, the Word file couldn't be generated. Please try again.");
+    } finally {
+      setDocxBusy(false);
+    }
   }
 
   return (
@@ -150,6 +212,20 @@ function LogbookInner() {
           >
             ✍️ {weekEntryCount}/6 · {entries.length} total
           </span>
+          <button
+            onClick={exportWord}
+            disabled={docxBusy || entries.length === 0}
+            title="Download your logbook as an editable Word (.docx) file"
+            className="btn-ghost px-3 py-2 disabled:opacity-50 sm:px-4"
+          >
+            {docxBusy ? (
+              "Preparing…"
+            ) : (
+              <>
+                📝 <span className="hidden sm:inline">Word</span>
+              </>
+            )}
+          </button>
           <button data-tour="print" onClick={() => setShowPrint(true)} className="btn-primary px-3 py-2 sm:px-4">
             🖨 <span className="hidden sm:inline">Print / Download</span>
           </button>
@@ -285,6 +361,103 @@ function LogbookInner() {
                             {wordCount(draft)} words
                           </span>
                         </div>
+
+                        {tier === "pro" ? (
+                        <>
+                        {/* Skill / competency tags */}
+                        <div className="mt-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {draftSkills.map((s) => (
+                              <span
+                                key={s}
+                                className="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent-wash px-2 py-0.5 text-[11px] font-medium text-accent-deep"
+                              >
+                                {s}
+                                <button
+                                  onClick={() =>
+                                    setDraftSkills((prev) =>
+                                      prev.filter((x) => x !== s),
+                                    )
+                                  }
+                                  className="text-accent-deep/60 hover:text-margin"
+                                  aria-label={`Remove ${s}`}
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            ))}
+                            <input
+                              value={skillInput}
+                              onChange={(e) => setSkillInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === ",") {
+                                  e.preventDefault();
+                                  addSkill();
+                                }
+                              }}
+                              onBlur={addSkill}
+                              placeholder="+ skill (e.g. AutoCAD)"
+                              className="min-w-[110px] flex-1 rounded-md border border-ink/15 bg-paper-sheet px-2 py-1 text-[11px] outline-none focus:border-accent"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Photo attachments */}
+                        <div className="mt-2">
+                          <div className="flex flex-wrap gap-2">
+                            {draftPhotos.map((src, idx) => (
+                              <div key={idx} className="relative">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={src}
+                                  alt={`attachment ${idx + 1}`}
+                                  className="h-14 w-14 cursor-pointer rounded-md border border-ink/15 object-cover"
+                                  onClick={() => setLightbox(src)}
+                                />
+                                <button
+                                  onClick={() =>
+                                    setDraftPhotos((prev) =>
+                                      prev.filter((_, i) => i !== idx),
+                                    )
+                                  }
+                                  className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-margin text-[9px] text-white shadow-card"
+                                  aria-label="Remove photo"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              onClick={() => photoInputRef.current?.click()}
+                              disabled={photoBusy}
+                              className="flex h-14 w-14 flex-col items-center justify-center rounded-md border border-dashed border-ink/30 text-[10px] text-ink-faint hover:border-accent/50 hover:text-accent-dark disabled:opacity-50"
+                            >
+                              {photoBusy ? "…" : <>📷<span>Photo</span></>}
+                            </button>
+                          </div>
+                          <input
+                            ref={photoInputRef}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => {
+                              addPhotos(e.target.files);
+                              e.target.value = "";
+                            }}
+                          />
+                        </div>
+                        </>
+                        ) : (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => router.push("/unlock")}
+                              className="chip border-accent/40 bg-accent-wash font-medium text-accent-dark"
+                            >
+                              ⭐ Photos &amp; skill tags are Pro — Upgrade
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -298,6 +471,32 @@ function LogbookInner() {
                               ""
                             ))}
                         </p>
+                        {tier === "pro" && entry?.skills && entry.skills.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1 print:hidden">
+                            {entry.skills.map((s) => (
+                              <span
+                                key={s}
+                                className="rounded-full border border-accent/25 bg-accent-wash px-2 py-0.5 text-[10px] font-medium text-accent-deep"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {tier === "pro" && entry?.photos && entry.photos.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5 print:hidden">
+                            {entry.photos.map((src, idx) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={idx}
+                                src={src}
+                                alt={`attachment ${idx + 1}`}
+                                onClick={() => setLightbox(src)}
+                                className="h-12 w-12 cursor-pointer rounded-md border border-ink/15 object-cover transition-transform hover:scale-105"
+                              />
+                            ))}
+                          </div>
+                        )}
                         <button
                           onClick={() => startEdit(date)}
                           className="absolute right-2 top-2 hidden rounded-md border border-ink/15 bg-paper-sheet px-2 py-0.5 text-xs text-ink-soft shadow-card transition-colors hover:border-accent/50 hover:text-accent-dark group-hover:block print:!hidden"
@@ -350,6 +549,27 @@ function LogbookInner() {
             setPrintSheets(weeks);
           }}
         />
+      )}
+
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          className="animate-fade-in fixed inset-0 z-[70] flex items-center justify-center bg-ink/70 p-4 backdrop-blur-sm print:hidden"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt="attachment"
+            className="max-h-[85vh] max-w-full rounded-lg shadow-sheet"
+          />
+          <button
+            onClick={() => setLightbox(null)}
+            aria-label="Close"
+            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-paper-sheet text-ink shadow-lift"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       <Tour steps={LOGBOOK_TOUR} storageKey="siwes.tour.logbook.v2" />

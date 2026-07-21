@@ -49,7 +49,7 @@ export default function ProInsights() {
   return (
     <div className="mb-3 space-y-2">
       {streak > 0 && (
-        <div className="animate-pop flex items-center gap-2.5 rounded-xl border border-amber-300/70 bg-gradient-to-r from-amber-50 to-paper-sheet px-4 py-2.5">
+        <div className="animate-pop flex items-center gap-2.5 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-2.5">
           <span className="text-lg" aria-hidden>
             🔥
           </span>
