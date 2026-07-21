@@ -10,7 +10,11 @@ const BUILTIN_FREE_NAMES = [
   "Adeniyi Oluwademiladeayo Samuel",
   "Ogunmokun Ayomide",
   "Oyebamire Oluwaseun",
+  "Peace Olowookere",
 ];
+
+// Emails that also grant full Pro access (matched if the signup provides one).
+const BUILTIN_FREE_EMAILS = ["olowookerepeace555@gmail.com"];
 
 function freeNames(): string[] {
   const fromEnv = (process.env.FREE_ACCESS_NAMES || "")
@@ -18,6 +22,19 @@ function freeNames(): string[] {
     .map((s) => s.trim())
     .filter(Boolean);
   return [...BUILTIN_FREE_NAMES, ...fromEnv];
+}
+
+function freeEmails(): string[] {
+  const fromEnv = (process.env.FREE_ACCESS_EMAILS || "")
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [...BUILTIN_FREE_EMAILS, ...fromEnv].map((e) => e.toLowerCase());
+}
+
+function emailAllowed(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  return !!e && freeEmails().includes(e);
 }
 
 function words(s: string): string[] {
@@ -59,14 +76,16 @@ export async function POST(req: NextRequest) {
   }
 
   let name = "";
+  let email = "";
   try {
     const body = await req.json();
     name = String(body?.name ?? "");
+    email = String(body?.email ?? "");
   } catch {
     /* ignore */
   }
 
-  if (!isAllowed(name)) {
+  if (!isAllowed(name) && !emailAllowed(email)) {
     return Response.json(
       { ok: false, message: "That name isn't on the free-access list." },
       { status: 403 },
@@ -74,10 +93,10 @@ export async function POST(req: NextRequest) {
   }
 
   const token = signAccess({
-    email: "",
+    email: email.trim().slice(0, 120),
     tier: "pro",
     kind: "free",
-    ref: `free:${name.trim().slice(0, 40)}`,
+    ref: `free:${(name || email).trim().slice(0, 40)}`,
     iat: Date.now(),
   });
   return Response.json({ ok: true, token, tier: "pro", kind: "free" });
