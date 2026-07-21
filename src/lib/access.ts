@@ -74,3 +74,46 @@ export function clearAccess() {
   localStorage.removeItem(TRIAL_EXP_KEY);
   window.dispatchEvent(new Event("siwes-access-change"));
 }
+
+const CLIENT_ID_KEY = "siwes.clientid.v1";
+
+/** Stable anonymous id for this browser, used only to de-duplicate a person in
+ *  the founder panel. */
+export function clientId(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem(CLIENT_ID_KEY);
+  if (!id) {
+    id =
+      "c_" +
+      Date.now().toString(36) +
+      Math.random().toString(36).slice(2, 10);
+    localStorage.setItem(CLIENT_ID_KEY, id);
+  }
+  return id;
+}
+
+/** Report presence to the founder panel (best-effort, safe to call often). */
+export async function trackPresence(profile?: {
+  fullName?: string;
+  firmName?: string;
+}) {
+  const token = loadAccessToken();
+  if (!token) return;
+  try {
+    await fetch("/api/track", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": token,
+      },
+      body: JSON.stringify({
+        clientId: clientId(),
+        name: profile?.fullName,
+        firm: profile?.firmName,
+      }),
+      keepalive: true,
+    });
+  } catch {
+    /* best-effort only */
+  }
+}

@@ -13,6 +13,10 @@ export interface AccessClaims {
   kind?: Kind;
   /** Optional expiry (ms epoch) — used for time-limited trials. */
   exp?: number;
+  /** Set to "admin" for founder-panel sessions. */
+  role?: "admin";
+  /** Founder display name (olive / peace). */
+  name?: string;
 }
 
 const SECRET = process.env.ACCESS_TOKEN_SECRET || "";

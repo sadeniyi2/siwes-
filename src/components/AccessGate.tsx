@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearAccess, loadAccessToken, loadTier, saveAccess, Tier } from "@/lib/access";
+import {
+  clearAccess,
+  loadAccessToken,
+  loadTier,
+  saveAccess,
+  trackPresence,
+  Tier,
+} from "@/lib/access";
+import { loadProfile } from "@/lib/store";
 
 /**
  * Page blocker. Verifies the stored access token against the backend on mount.
@@ -40,6 +48,9 @@ export default function AccessGate({
           saveAccess(token, j.tier as Tier, j.kind ?? "paid");
           setTier(j.tier as Tier);
           setState("ok");
+          // Report presence for the founder panel (best-effort).
+          const p = loadProfile();
+          trackPresence({ fullName: p?.fullName, firmName: p?.firmName });
         } else {
           clearAccess();
           router.replace("/unlock");

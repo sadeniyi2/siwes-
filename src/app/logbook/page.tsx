@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AccessGate from "@/components/AccessGate";
+import Tour, { TourStep } from "@/components/Tour";
 import { deleteEntry, loadEntries, loadProfile, saveEntry } from "@/lib/store";
 import {
   LogEntry,
@@ -15,6 +16,24 @@ import {
   weekNumberOf,
   wordCount,
 } from "@/lib/types";
+
+const LOGBOOK_TOUR: TourStep[] = [
+  {
+    selector: '[data-tour="sheet"]',
+    title: "Your Weekly Progress Chart",
+    body: "This mirrors your real SIWES logbook. Entries you save from the assistant show up here. Hover any box and tap Add/Edit to write one by hand.",
+  },
+  {
+    selector: '[data-tour="weeks"]',
+    title: "Jump between weeks",
+    body: "Each dot is one week of your placement. Green means all days are filled. Tap a dot (or the arrows) to open that week.",
+  },
+  {
+    selector: '[data-tour="print"]',
+    title: "Print or download",
+    body: "Print one week, every week, or choose weeks — then pick a printer, or “Save as PDF” to download your logbook.",
+  },
+];
 
 export default function LogbookPage() {
   return <AccessGate>{<LogbookInner />}</AccessGate>;
@@ -131,14 +150,14 @@ function LogbookInner() {
           >
             ✍️ {weekEntryCount}/6 · {entries.length} total
           </span>
-          <button onClick={() => setShowPrint(true)} className="btn-primary px-3 py-2 sm:px-4">
+          <button data-tour="print" onClick={() => setShowPrint(true)} className="btn-primary px-3 py-2 sm:px-4">
             🖨 <span className="hidden sm:inline">Print / Download</span>
           </button>
         </div>
       </div>
 
       {/* Week-dot pager: one dot per internship week, filled by progress */}
-      <div className="mb-4 flex flex-wrap items-center justify-center gap-1.5 print:hidden">
+      <div data-tour="weeks" className="mb-4 flex flex-wrap items-center justify-center gap-1.5 print:hidden">
         {Array.from({ length: totalWeeks }, (_, i) => {
           const start = addDays(firstMonday, i * 7);
           const dates = WORK_DAYS.map((_, d) => addDays(start, d));
@@ -169,6 +188,7 @@ function LogbookInner() {
       <div className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 print:mx-0 print:overflow-visible print:px-0">
       <div
         key={weekStart}
+        data-tour="sheet"
         className="print-sheet sheet-paper sheet-margin sheet-seal animate-page-turn relative mx-auto min-w-[600px] max-w-3xl rounded-lg border border-ink/20 p-5 pl-12 shadow-sheet sm:min-w-0 sm:p-8 sm:pl-14"
       >
         <div className="mb-6 flex items-baseline justify-between">
@@ -331,6 +351,8 @@ function LogbookInner() {
           }}
         />
       )}
+
+      <Tour steps={LOGBOOK_TOUR} storageKey="siwes.tour.logbook.v1" />
     </div>
   );
 }

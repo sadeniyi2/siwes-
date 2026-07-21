@@ -1,0 +1,94 @@
+import { NextRequest } from "next/server";
+import { verifyAccess } from "@/lib/token";
+import { kvConfigured, listUsers } from "@/lib/kv";
+
+export const runtime = "nodejs";
+
+interface Sale {
+  id: string | number;
+  email: string;
+  name: string;
+  amount: number;
+  tier: "basic" | "pro" | "other";
+  date: string;
+  ref: string;
+}
+
+async function fetchSales(): Promise<{ sales: Sale[]; error?: string }> {
+  const secret = process.env.FLW_SECRET_KEY;
+  if (!secret) return { sales: [], error: "no_flw_key" };
+  try {
+    const res = await fetch(
+      "https://api.flutterwave.com/v3/transactions?status=successful",
+      { headers: { Authorization: `Bearer ${secret}` }, cache: "no-store" },
+    );
+    const json = await res.json();
+    if (json.status !== "success" || !Array.isArray(json.data)) {
+      return { sales: [], error: "flw_error" };
+    }
+    const sales: Sale[] = json.data
+      .filter((t: { tx_ref?: string }) =>
+        String(t.tx_ref ?? "").startsWith("siwes-"),
+      )
+      .map((t: {
+        id: string | number;
+        amount: number;
+        customer?: { email?: string; name?: string };
+        created_at: string;
+        tx_ref: string;
+      }) => {
+        const amt = Number(t.amount ?? 0);
+        return {
+          id: t.id,
+          email: t.customer?.email ?? "",
+          name: t.customer?.name ?? "",
+          amount: amt,
+          tier: amt >= 2500 ? "pro" : amt >= 1500 ? "basic" : "other",
+          date: t.created_at,
+          ref: t.tx_ref,
+        } as Sale;
+      });
+    return { sales };
+  } catch {
+    return { sales: [], error: "flw_error" };
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const claims = verifyAccess(req.headers.get("x-founder-token"));
+  if (!claims || claims.role !== "admin") {
+    return Response.json({ ok: false }, { status: 401 });
+  }
+
+  const [{ sales, error }, users] = await Promise.all([
+    fetchSales(),
+    listUsers(),
+  ]);
+
+  const now = Date.now();
+  const revenue = sales.reduce((n, s) => n + s.amount, 0);
+  const stats = {
+    revenue,
+    salesCount: sales.length,
+    basicSales: sales.filter((s) => s.tier === "basic").length,
+    proSales: sales.filter((s) => s.tier === "pro").length,
+    totalUsers: users.length,
+    activeTrials: users.filter(
+      (u) => u.kind === "trial" && (u.trialExp ?? 0) > now,
+    ).length,
+    expiredTrials: users.filter(
+      (u) => u.kind === "trial" && (u.trialExp ?? 0) <= now,
+    ).length,
+    onlineNow: users.filter((u) => now - u.lastSeen < 5 * 60 * 1000).length,
+  };
+
+  return Response.json({
+    ok: true,
+    admin: claims.name,
+    stats,
+    sales: sales.sort((a, b) => (a.date < b.date ? 1 : -1)),
+    users: users.sort((a, b) => b.lastSeen - a.lastSeen),
+    tracking: kvConfigured(),
+    salesError: error ?? null,
+  });
+}

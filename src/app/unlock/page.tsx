@@ -4,6 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile } from "@/lib/store";
 import { PLANS, TRIAL_DAYS, Tier, loadTier, saveAccess, saveTrial } from "@/lib/access";
+import Tour, { TourStep } from "@/components/Tour";
+
+const UNLOCK_TOUR: TourStep[] = [
+  {
+    selector: '[data-tour="trial"]',
+    title: "Start here — it's free",
+    body: `Tap this to try everything free for ${TRIAL_DAYS} days. No card, no payment. You can decide to pay later.`,
+  },
+  {
+    selector: '[data-tour="plans"]',
+    title: "Or pick a plan",
+    body: "Basic covers your daily entries and weekly summaries. Pro adds monthly summaries, the full final report, and diagrams.",
+  },
+];
 
 // Minimal typing for the Flutterwave inline checkout global.
 declare global {
@@ -224,6 +238,7 @@ export default function UnlockPage() {
             </p>
           </div>
           <button
+            data-tour="trial"
             onClick={startTrial}
             disabled={trialBusy}
             className="btn-primary shrink-0 disabled:opacity-60"
@@ -267,7 +282,7 @@ export default function UnlockPage() {
         </p>
       )}
 
-      <div className="grid items-start gap-4 sm:grid-cols-2">
+      <div data-tour="plans" className="grid items-start gap-4 sm:grid-cols-2">
         {(["basic", "pro"] as Tier[]).map((id) => {
           const plan = PLANS[id];
           const isPro = id === "pro";
@@ -356,6 +371,17 @@ export default function UnlockPage() {
         Secure payment by Flutterwave · card, bank transfer & USSD · your receipt
         is emailed to you. Access is tied to this browser.
       </p>
+      <p className="mt-1 text-center text-xs text-ink-faint">
+        By starting a trial or paying you agree to our{" "}
+        <a href="/terms" className="text-accent underline">
+          Terms
+        </a>{" "}
+        &{" "}
+        <a href="/privacy" className="text-accent underline">
+          Privacy Policy
+        </a>
+        .
+      </p>
       <p className="mt-2 text-center text-xs text-ink-faint">
         New here?{" "}
         <a
@@ -368,6 +394,8 @@ export default function UnlockPage() {
         </a>
         .
       </p>
+
+      <Tour steps={UNLOCK_TOUR} storageKey="siwes.tour.unlock.v1" />
     </div>
   );
 }

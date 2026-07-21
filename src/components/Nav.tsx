@@ -30,13 +30,14 @@ export default function Nav() {
   return (
     <>
       {/* Desktop / tablet: inline pill nav */}
-      <nav className="hidden gap-1 rounded-full border border-ink/10 bg-paper p-1 text-sm sm:flex">
+      <nav className="hidden items-center gap-1 rounded-full border border-ink/10 bg-paper p-1 text-sm sm:flex">
         {LINKS.map(({ href, label }) => {
           const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
+              data-tour={href === "/logbook" ? "nav-logbook" : undefined}
               className={`rounded-full px-3.5 py-1.5 font-medium transition-all duration-200 ${
                 active
                   ? "bg-accent text-white shadow-lift"
@@ -47,6 +48,14 @@ export default function Nav() {
             </Link>
           );
         })}
+        <button
+          onClick={() => window.dispatchEvent(new Event("siwes-start-tour"))}
+          title="Show the tutorial"
+          aria-label="Show the tutorial"
+          className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-accent-soft hover:text-accent-dark"
+        >
+          ?
+        </button>
       </nav>
 
       {/* Mobile: hamburger (stack lines) button */}
@@ -109,6 +118,18 @@ export default function Nav() {
                 </Link>
               );
             })}
+            <button
+              onClick={() => {
+                setOpen(false);
+                setTimeout(
+                  () => window.dispatchEvent(new Event("siwes-start-tour")),
+                  350,
+                );
+              }}
+              className="rounded-xl bg-paper px-4 py-3 text-left text-base font-medium text-ink-soft transition-all duration-200 hover:bg-accent-soft hover:text-accent-dark"
+            >
+              ❓ Show tutorial
+            </button>
           </div>
         </nav>
       </div>
