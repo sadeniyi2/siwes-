@@ -51,10 +51,30 @@ export default function ThemeToggle({
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
       className={`flex items-center justify-center rounded-full transition-colors hover:bg-accent-soft hover:text-accent-dark ${className}`}
     >
-      {/* Keep markup stable until mounted to avoid hydration mismatch */}
-      <span className="text-base leading-none" suppressHydrationWarning>
-        {ready ? (isDark ? "☀️" : "🌙") : "🌙"}
-      </span>
+      {/* Contrast disc: half-filled circle rotates with the active theme.
+          Markup stays stable until mounted to avoid hydration mismatch. */}
+      <svg
+        viewBox="0 0 20 20"
+        width="17"
+        height="17"
+        aria-hidden="true"
+        suppressHydrationWarning
+        className="transition-transform duration-300"
+        style={{ transform: ready && isDark ? "rotate(180deg)" : "none" }}
+      >
+        <circle
+          cx="10"
+          cy="10"
+          r="7.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        />
+        <path
+          d="M10 2.5a7.5 7.5 0 0 0 0 15z"
+          fill="currentColor"
+        />
+      </svg>
     </button>
   );
 }
