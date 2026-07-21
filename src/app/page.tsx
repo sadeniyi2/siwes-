@@ -316,7 +316,7 @@ function Assistant({ tier }: { tier: Tier }) {
       style={{ height: "calc(100dvh - 7.5rem)" }}
     >
       <Toast message={toast} onDone={() => setToast(null)} />
-      <Tour steps={ASSISTANT_TOUR} storageKey="siwes.tour.assistant.v1" />
+      <Tour steps={ASSISTANT_TOUR} storageKey="siwes.tour.assistant.v2" />
       <KeyModal
         open={keyModal !== null}
         reason={keyModal ?? "setup"}

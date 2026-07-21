@@ -352,7 +352,7 @@ function LogbookInner() {
         />
       )}
 
-      <Tour steps={LOGBOOK_TOUR} storageKey="siwes.tour.logbook.v1" />
+      <Tour steps={LOGBOOK_TOUR} storageKey="siwes.tour.logbook.v2" />
     </div>
   );
 }
