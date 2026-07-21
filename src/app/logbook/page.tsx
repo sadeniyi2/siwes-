@@ -7,6 +7,7 @@ import Tour, { TourStep } from "@/components/Tour";
 import { deleteEntry, loadEntries, loadProfile, saveEntry } from "@/lib/store";
 import { exportLogbookDocx } from "@/lib/docx";
 import { compressImage } from "@/lib/image";
+import { loadTier, Tier } from "@/lib/access";
 import {
   LogEntry,
   Profile,
@@ -44,6 +45,7 @@ export default function LogbookPage() {
 function LogbookInner() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [tier, setTier] = useState<Tier | null>(null);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [weekStart, setWeekStart] = useState<string>("");
   const [section, setSection] = useState("");
@@ -66,6 +68,7 @@ function LogbookInner() {
       return;
     }
     setProfile(p);
+    setTier(loadTier());
     setEntries(loadEntries());
     const firstMonday = mondayOf(p.startDate);
     const today = new Date().toISOString().slice(0, 10);
@@ -359,6 +362,8 @@ function LogbookInner() {
                           </span>
                         </div>
 
+                        {tier === "pro" ? (
+                        <>
                         {/* Skill / competency tags */}
                         <div className="mt-2">
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -442,6 +447,17 @@ function LogbookInner() {
                             }}
                           />
                         </div>
+                        </>
+                        ) : (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => router.push("/unlock")}
+                              className="chip border-accent/40 bg-accent-wash font-medium text-accent-dark"
+                            >
+                              ⭐ Photos &amp; skill tags are Pro — Upgrade
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -455,7 +471,7 @@ function LogbookInner() {
                               ""
                             ))}
                         </p>
-                        {entry?.skills && entry.skills.length > 0 && (
+                        {tier === "pro" && entry?.skills && entry.skills.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1 print:hidden">
                             {entry.skills.map((s) => (
                               <span
@@ -467,7 +483,7 @@ function LogbookInner() {
                             ))}
                           </div>
                         )}
-                        {entry?.photos && entry.photos.length > 0 && (
+                        {tier === "pro" && entry?.photos && entry.photos.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1.5 print:hidden">
                             {entry.photos.map((src, idx) => (
                               // eslint-disable-next-line @next/next/no-img-element
