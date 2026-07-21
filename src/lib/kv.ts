@@ -302,6 +302,35 @@ export async function trialCountForIp(ip: string, sinceMs = 0): Promise<number> 
   }
 }
 
+export interface TrialRecord {
+  matric: string;
+  ip?: string;
+  name?: string;
+  started: number;
+  exp: number;
+}
+
+/** All recorded trials, most recent first (founder monitoring). */
+export async function listTrials(): Promise<TrialRecord[]> {
+  if (!kvConfigured()) return [];
+  try {
+    const r = await sb(`${TRIALS}?select=*&order=started.desc&limit=2000`, {
+      method: "GET",
+    });
+    if (!r.ok) return [];
+    const rows = (await r.json()) as TrialRow[];
+    return rows.map((row) => ({
+      matric: row.matric,
+      ip: row.ip ?? undefined,
+      name: row.name ?? undefined,
+      started: row.started ?? 0,
+      exp: row.exp ?? 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /** Record a started trial. Returns false only on a hard write failure. */
 export async function recordTrial(
   matric: string,

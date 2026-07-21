@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { verifyAccess } from "@/lib/token";
-import { kvConfigured, listUsers } from "@/lib/kv";
+import { kvConfigured, listTrials, listUsers } from "@/lib/kv";
 
 export const runtime = "nodejs";
 
@@ -60,10 +60,17 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false }, { status: 401 });
   }
 
-  const [{ sales, error }, users] = await Promise.all([
+  const [{ sales, error }, users, trials] = await Promise.all([
     fetchSales(),
     listUsers(),
+    listTrials(),
   ]);
+
+  // Group trials by IP to surface possible abuse (many trials, one network).
+  const ipCounts = new Map<string, number>();
+  for (const t of trials) {
+    if (t.ip) ipCounts.set(t.ip, (ipCounts.get(t.ip) ?? 0) + 1);
+  }
 
   const now = Date.now();
   const revenue = sales.reduce((n, s) => n + s.amount, 0);
@@ -73,12 +80,9 @@ export async function POST(req: NextRequest) {
     basicSales: sales.filter((s) => s.tier === "basic").length,
     proSales: sales.filter((s) => s.tier === "pro").length,
     totalUsers: users.length,
-    activeTrials: users.filter(
-      (u) => u.kind === "trial" && (u.trialExp ?? 0) > now,
-    ).length,
-    expiredTrials: users.filter(
-      (u) => u.kind === "trial" && (u.trialExp ?? 0) <= now,
-    ).length,
+    trialsTaken: trials.length,
+    activeTrials: trials.filter((t) => t.exp > now).length,
+    expiredTrials: trials.filter((t) => t.exp <= now).length,
     onlineNow: users.filter((u) => now - u.lastSeen < 5 * 60 * 1000).length,
   };
 
@@ -88,6 +92,7 @@ export async function POST(req: NextRequest) {
     stats,
     sales: sales.sort((a, b) => (a.date < b.date ? 1 : -1)),
     users: users.sort((a, b) => b.lastSeen - a.lastSeen),
+    trials: trials.map((t) => ({ ...t, ipCount: t.ip ? ipCounts.get(t.ip) ?? 1 : 0 })),
     tracking: kvConfigured(),
     salesError: error ?? null,
   });
