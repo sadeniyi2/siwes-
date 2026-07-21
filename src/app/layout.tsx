@@ -47,6 +47,16 @@ export default function RootLayout({
         <main className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
           {children}
         </main>
+        <footer className="mx-auto max-w-5xl px-4 py-6 text-center text-xs text-ink-faint print:hidden">
+          <Link href="/terms" className="hover:text-accent hover:underline">
+            Terms of Use
+          </Link>
+          <span className="mx-2">·</span>
+          <Link href="/privacy" className="hover:text-accent hover:underline">
+            Privacy Policy
+          </Link>
+          <p className="mt-1">Your logbook data stays in your browser.</p>
+        </footer>
       </body>
     </html>
   );

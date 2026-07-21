@@ -6,6 +6,7 @@ import AssistantMessage, { ParsedEntry } from "@/components/AssistantMessage";
 import AccessGate from "@/components/AccessGate";
 import KeyModal from "@/components/KeyModal";
 import Toast from "@/components/Toast";
+import Tour, { TourStep } from "@/components/Tour";
 import {
   Tier,
   isTrial,
@@ -48,6 +49,29 @@ function formatCountdown(ms: number): string | null {
   if (h > 0) return `${pad(h)}h ${pad(m)}m ${pad(sec)}s`;
   return `${pad(m)}m ${pad(sec)}s`;
 }
+
+const ASSISTANT_TOUR: TourStep[] = [
+  {
+    selector: '[data-tour="composer"]',
+    title: "Tell me your day here",
+    body: "Type everything you did at work — rough and messy is fine. Press Send and I'll turn it into a neat 35–70 word logbook entry.",
+  },
+  {
+    selector: '[data-tour="actions"]',
+    title: "One-tap summaries & report",
+    body: "When you're ready, generate your weekly summary, monthly summary, or the full final SIWES report from here.",
+  },
+  {
+    selector: '[data-tour="key"]',
+    title: "Your free AI key",
+    body: "The app runs on your own free Google Gemini key. Tap here anytime to add or change it.",
+  },
+  {
+    selector: '[data-tour="nav-logbook"]',
+    title: "Your logbook",
+    body: "Open the Logbook tab to see your Weekly Progress Chart, edit entries, and print or download them.",
+  },
+];
 
 const EXAMPLE_PROMPTS = [
   "Today I set up VS Code and Git, then my supervisor showed me the company database and I practiced writing SQL queries.",
@@ -292,6 +316,7 @@ function Assistant({ tier }: { tier: Tier }) {
       style={{ height: "calc(100dvh - 7.5rem)" }}
     >
       <Toast message={toast} onDone={() => setToast(null)} />
+      <Tour steps={ASSISTANT_TOUR} storageKey="siwes.tour.assistant.v1" />
       <KeyModal
         open={keyModal !== null}
         reason={keyModal ?? "setup"}
@@ -309,7 +334,7 @@ function Assistant({ tier }: { tier: Tier }) {
       />
 
       <div className="mb-3 flex items-center gap-2">
-        <div className="-mx-3 flex flex-1 gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
+        <div data-tour="actions" className="-mx-3 flex flex-1 gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
           {QUICK_ACTIONS.filter((a) => tier === "pro" || !a.pro).map((a) => (
             <button
               key={a.label}
@@ -331,6 +356,7 @@ function Assistant({ tier }: { tier: Tier }) {
           )}
         </div>
         <button
+          data-tour="key"
           onClick={() => setKeyModal("setup")}
           title={hasKey ? "Your Gemini key is connected" : "Add your Gemini key"}
           className={`chip shrink-0 ${
@@ -463,6 +489,7 @@ function Assistant({ tier }: { tier: Tier }) {
         }}
       >
         <textarea
+          data-tour="composer"
           ref={textareaRef}
           value={input}
           onChange={(e) => {
