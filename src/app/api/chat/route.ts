@@ -13,8 +13,31 @@ export const maxDuration = 300;
 // Override via the GEMINI_MODEL env var to pin a specific model.
 const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
+/** Turn a raw Gemini error into a clean, friendly message the user can read. */
+function friendlyMessage(message: string): string {
+  const m = message.toLowerCase();
+  if (
+    m.includes("503") ||
+    m.includes("unavailable") ||
+    m.includes("high demand") ||
+    m.includes("overloaded")
+  ) {
+    return "The AI is very busy right now. This is usually temporary — please wait a minute and try again.";
+  }
+  if (m.includes("500") || m.includes("internal")) {
+    return "The AI service had a brief problem. Please try again.";
+  }
+  if (m.includes("timeout") || m.includes("deadline")) {
+    return "That took too long to generate. Please try again.";
+  }
+  if (m.includes("safety") || m.includes("blocked") || m.includes("candidate")) {
+    return "The assistant couldn't respond to that. Try rewording your notes.";
+  }
+  return "Something went wrong reaching the AI. Please try again in a moment.";
+}
+
 /** Classify a Gemini error so the client can react (e.g. prompt for a new key). */
-function classify(message: string): { status: number; reason: string } {
+function classify(message: string): { status: number; reason: string; message: string } {
   const m = message.toLowerCase();
   if (
     m.includes("api key not valid") ||
@@ -24,7 +47,11 @@ function classify(message: string): { status: number; reason: string } {
     m.includes("401") ||
     m.includes("403")
   ) {
-    return { status: 401, reason: "invalid_key" };
+    return {
+      status: 401,
+      reason: "invalid_key",
+      message: "That Gemini key was rejected. Please check it and try again.",
+    };
   }
   if (
     m.includes("resource_exhausted") ||
@@ -33,9 +60,13 @@ function classify(message: string): { status: number; reason: string } {
     m.includes("429") ||
     m.includes("exhausted")
   ) {
-    return { status: 429, reason: "quota" };
+    return {
+      status: 429,
+      reason: "quota",
+      message: "This key's free quota is used up for now.",
+    };
   }
-  return { status: 502, reason: "error" };
+  return { status: 503, reason: "busy", message: friendlyMessage(message) };
 }
 
 export async function POST(req: NextRequest) {
@@ -146,8 +177,8 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const { status, reason } = classify(message);
+    const raw = err instanceof Error ? err.message : String(err);
+    const { status, reason, message } = classify(raw);
     return Response.json({ reason, message }, { status });
   }
 
@@ -160,10 +191,8 @@ export async function POST(req: NextRequest) {
           if (text) controller.enqueue(encoder.encode(text));
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        controller.enqueue(
-          encoder.encode(`\n\n⚠️ The assistant hit an error: ${msg}`),
-        );
+        const raw = err instanceof Error ? err.message : String(err);
+        controller.enqueue(encoder.encode(`\n\n⚠️ ${friendlyMessage(raw)}`));
       } finally {
         controller.close();
       }

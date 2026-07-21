@@ -80,6 +80,7 @@ function Assistant({ tier }: { tier: Tier }) {
   const [onTrial, setOnTrial] = useState(false);
   const [countdown, setCountdown] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -117,8 +118,11 @@ function Assistant({ tier }: { tier: Tier }) {
     return () => clearInterval(id);
   }, [onTrial]);
 
+  // Keep the latest message in view by scrolling ONLY the chat container —
+  // never the whole page (which was jumping the view to the top).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   const autoGrow = useCallback(() => {
@@ -209,8 +213,15 @@ function Assistant({ tier }: { tier: Tier }) {
       }
 
       if (!res.ok || !res.body) {
-        const detail = await res.text().catch(() => "");
-        throw new Error(detail || `Request failed (${res.status})`);
+        // Server sends a clean { message } for busy/maintenance/other errors.
+        let msg = "The assistant is unavailable right now. Please try again shortly.";
+        try {
+          const j = await res.json();
+          if (j?.message) msg = j.message;
+        } catch {
+          /* keep the default friendly message */
+        }
+        throw new Error(msg);
       }
 
       const reader = res.body.getReader();
@@ -277,8 +288,8 @@ function Assistant({ tier }: { tier: Tier }) {
 
   return (
     <div
-      className="flex flex-col"
-      style={{ minHeight: "calc(100dvh - 8.5rem)" }}
+      className="flex flex-col overflow-hidden"
+      style={{ height: "calc(100dvh - 7.5rem)" }}
     >
       <Toast message={toast} onDone={() => setToast(null)} />
       <KeyModal
@@ -370,7 +381,10 @@ function Assistant({ tier }: { tier: Tier }) {
         </div>
       )}
 
-      <div className="flex-1 space-y-4 overflow-y-auto rounded-2xl border border-ink/10 bg-paper-sheet p-4 shadow-sheet">
+      <div
+        ref={listRef}
+        className="flex-1 space-y-4 overflow-y-auto overscroll-contain rounded-2xl border border-ink/10 bg-paper-sheet p-4 shadow-sheet"
+      >
         {messages.length === 0 && (
           <div className="stagger mx-auto max-w-lg py-10 text-center">
             <div className="relative mx-auto mb-4 w-fit">

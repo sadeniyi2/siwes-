@@ -1,6 +1,5 @@
 "use client";
 
-import Script from "next/script";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile } from "@/lib/store";
@@ -14,6 +13,41 @@ declare global {
 }
 
 const PUBLIC_KEY = process.env.NEXT_PUBLIC_FLW_PUBLIC_KEY || "";
+const FLW_SRC = "https://checkout.flutterwave.com/v3.js";
+
+/** Load the Flutterwave inline script and resolve once the global is ready.
+ *  Robust against slow networks, an already-loaded script, and re-mounts. */
+function loadFlutterwave(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve(false);
+    if (window.FlutterwaveCheckout) return resolve(true);
+
+    const done = () => resolve(typeof window.FlutterwaveCheckout === "function");
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${FLW_SRC}"]`,
+    );
+    const script = existing ?? document.createElement("script");
+    if (!existing) {
+      script.src = FLW_SRC;
+      script.async = true;
+      document.body.appendChild(script);
+    }
+    script.addEventListener("load", done, { once: true });
+    script.addEventListener("error", () => resolve(false), { once: true });
+
+    // Fallback: poll for the global in case 'load' already fired or is missed.
+    const started = Date.now();
+    const poll = setInterval(() => {
+      if (window.FlutterwaveCheckout) {
+        clearInterval(poll);
+        resolve(true);
+      } else if (Date.now() - started > 8000) {
+        clearInterval(poll);
+        resolve(false);
+      }
+    }, 150);
+  });
+}
 
 function Check() {
   return (
@@ -36,10 +70,14 @@ export default function UnlockPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [ready, setReady] = useState(false);
   const [paying, setPaying] = useState<Tier | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentTier, setCurrentTier] = useState<Tier | null>(null);
+
+  // Preload the payment script as soon as the page opens.
+  useEffect(() => {
+    loadFlutterwave();
+  }, []);
 
   // Invisible safety net: if one of the invited names lands here, unlock them
   // silently by their profile name. There is no visible free-access UI.
@@ -109,7 +147,7 @@ export default function UnlockPage() {
     }
   }
 
-  function pay(tier: Tier) {
+  async function pay(tier: Tier) {
     setError(null);
     if (!PUBLIC_KEY) {
       setError("Payments aren't set up yet. Please try again later.");
@@ -119,12 +157,19 @@ export default function UnlockPage() {
       setError("Please enter a valid email so we can send your receipt.");
       return;
     }
-    if (!ready || !window.FlutterwaveCheckout) {
-      setError("Payment is still loading — give it a second and try again.");
-      return;
-    }
     const plan = PLANS[tier];
     setPaying(tier);
+
+    // Wait for the payment script to be ready (loads it if needed).
+    const ok = await loadFlutterwave();
+    if (!ok || typeof window.FlutterwaveCheckout !== "function") {
+      setError(
+        "Couldn't load the payment window. Check your internet connection (or disable any ad-blocker) and try again.",
+      );
+      setPaying(null);
+      return;
+    }
+
     window.FlutterwaveCheckout({
       public_key: PUBLIC_KEY,
       tx_ref: `siwes-${tier}-${Date.now()}`,
@@ -150,11 +195,6 @@ export default function UnlockPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <Script
-        src="https://checkout.flutterwave.com/v3.js"
-        onLoad={() => setReady(true)}
-      />
-
       <div className="stagger mb-6 text-center">
         <p className="animate-float mx-auto mb-3 w-fit text-4xl" aria-hidden>
           🔓
