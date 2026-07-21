@@ -162,7 +162,7 @@ export default function FounderPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="olive or peace"
-            className="mb-3 w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+            className="mb-3 w-full rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
           />
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
             Passcode
@@ -172,7 +172,7 @@ export default function FounderPage() {
             value={passcode}
             onChange={(e) => setPasscode(e.target.value)}
             placeholder="••••••••"
-            className="mb-4 w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+            className="mb-4 w-full rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
           />
           {error && (
             <p className="mb-3 rounded-xl border border-margin/30 bg-margin/10 px-3 py-2 text-sm text-margin">
@@ -228,7 +228,7 @@ export default function FounderPage() {
             <p className="mb-3 rounded-xl border border-accent/30 bg-accent-wash px-4 py-2.5 text-sm text-accent-deep">
               User &amp; trial tracking is off. Add a free Supabase project
               (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) and create the{" "}
-              <code className="rounded bg-white px-1">siwes_users</code> table to
+              <code className="rounded bg-paper-sheet px-1">siwes_users</code> table to
               see who&apos;s logged in and their trial left. Sales above still work.
             </p>
           )}

@@ -258,7 +258,7 @@ export default function UnlockPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Your name"
-              className="w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-sm shadow-card outline-none focus:border-accent focus:shadow-glow"
+              className="w-full rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm shadow-card outline-none focus:border-accent focus:shadow-glow"
             />
           </label>
           <label className="block">
@@ -270,7 +270,7 @@ export default function UnlockPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com — for your receipt"
-              className="w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-sm shadow-card outline-none focus:border-accent focus:shadow-glow"
+              className="w-full rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm shadow-card outline-none focus:border-accent focus:shadow-glow"
             />
           </label>
         </div>
@@ -353,7 +353,7 @@ export default function UnlockPage() {
                     className={`btn w-full py-3 disabled:opacity-60 ${
                       isPro
                         ? "bg-accent text-white hover:bg-accent-dark hover:shadow-lift"
-                        : "border border-ink/15 bg-white text-ink hover:border-accent/50 hover:text-accent-dark"
+                        : "border border-ink/15 bg-paper-sheet text-ink hover:border-accent/50 hover:text-accent-dark"
                     }`}
                   >
                     {paying === id

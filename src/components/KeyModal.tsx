@@ -109,7 +109,7 @@ export default function KeyModal({
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && save()}
           placeholder={existing ? "•••••••••• (replace current key)" : "AIza…"}
-          className="mb-4 w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-sm shadow-card outline-none transition-all duration-200 focus:border-accent focus:shadow-glow"
+          className="mb-4 w-full rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm shadow-card outline-none transition-all duration-200 focus:border-accent focus:shadow-glow"
         />
 
         <div className="flex items-center gap-2">
