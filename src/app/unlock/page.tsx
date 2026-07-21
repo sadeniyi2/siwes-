@@ -92,6 +92,7 @@ export default function UnlockPage() {
   const [redeeming, setRedeeming] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const [matric, setMatric] = useState("");
 
   // Preload the payment script as soon as the page opens.
   useEffect(() => {
@@ -125,6 +126,7 @@ export default function UnlockPage() {
     const p = loadProfile();
     if (p) {
       setName(p.fullName);
+      if (p.matricNumber) setMatric(p.matricNumber);
       if (!loadTier()) claimFreeSilently(p.fullName);
     }
     setCurrentTier(loadTier());
@@ -186,9 +188,19 @@ export default function UnlockPage() {
   const [trialBusy, setTrialBusy] = useState(false);
   async function startTrial() {
     setError(null);
+    if (!matric.trim()) {
+      setError(
+        "Please enter your matric / registration number to start the free trial.",
+      );
+      return;
+    }
     setTrialBusy(true);
     try {
-      const res = await fetch("/api/access/trial", { method: "POST" });
+      const res = await fetch("/api/access/trial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matric, name }),
+      });
       const j = await res.json();
       if (res.ok && j.ok) {
         saveTrial(j.token, j.exp);
@@ -339,27 +351,51 @@ export default function UnlockPage() {
       )}
 
       {!currentTier && !showEnded && (
-        <div className="animate-rise mb-5 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-accent/40 bg-accent-wash p-5 text-center sm:flex-row sm:text-left">
-          <span className="text-3xl" aria-hidden>
-            ✨
-          </span>
-          <div className="flex-1">
-            <p className="font-display text-base font-semibold text-accent-deep">
-              Not sure yet? Try it free for {TRIAL_DAYS} days.
-            </p>
-            <p className="text-sm text-ink-soft">
-              Full access to daily entries and your logbook for {TRIAL_DAYS}{" "}
-              days — no payment, no card. Pay only if you like it.
-            </p>
+        <div className="animate-rise mb-5 rounded-2xl border-2 border-dashed border-accent/40 bg-accent-wash p-5">
+          <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:text-left">
+            <span className="text-3xl" aria-hidden>
+              ✨
+            </span>
+            <div className="flex-1">
+              <p className="font-display text-base font-semibold text-accent-deep">
+                Not sure yet? Try it free for {TRIAL_DAYS} days.
+              </p>
+              <p className="text-sm text-ink-soft">
+                Full access to daily entries and your logbook for {TRIAL_DAYS}{" "}
+                days — no payment, no card. Pay only if you like it.
+              </p>
+            </div>
           </div>
-          <button
-            data-tour="trial"
-            onClick={startTrial}
-            disabled={trialBusy}
-            className="btn-primary shrink-0 disabled:opacity-60"
-          >
-            {trialBusy ? "Starting…" : `Start ${TRIAL_DAYS}-day trial →`}
-          </button>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <label className="flex-1">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-accent-deep/80">
+                Matric / Reg number <span className="text-margin">*</span>
+              </span>
+              <input
+                value={matric}
+                onChange={(e) => setMatric(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    startTrial();
+                  }
+                }}
+                placeholder="e.g. 20/52HA093"
+                className="w-full rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm shadow-card outline-none focus:border-accent focus:shadow-glow"
+              />
+            </label>
+            <button
+              data-tour="trial"
+              onClick={startTrial}
+              disabled={trialBusy}
+              className="btn-primary shrink-0 disabled:opacity-60"
+            >
+              {trialBusy ? "Starting…" : `Start ${TRIAL_DAYS}-day trial →`}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-ink-faint">
+            Your matric number secures your one free trial — one per student.
+          </p>
         </div>
       )}
 
