@@ -21,11 +21,17 @@ import "server-only";
 //     uses bigint default 0,
 //     created bigint
 //   );
+//   create table if not exists siwes_trials (
+//     matric text primary key,
+//     ip text, name text,
+//     started bigint, exp bigint
+//   );
 
 const SB_URL = process.env.SUPABASE_URL || "";
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const TABLE = "siwes_users";
 const CODES = "siwes_codes";
+const TRIALS = "siwes_trials";
 
 export function kvConfigured(): boolean {
   return !!SB_URL && !!SB_KEY;
@@ -237,6 +243,113 @@ export async function deleteCode(code: string): Promise<boolean> {
   try {
     const r = await sb(`${CODES}?code=eq.${encodeURIComponent(code.trim())}`, {
       method: "DELETE",
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Trial de-duplication. One free trial per matric number, tracked server-side
+// so clearing the browser / using incognito / a new device can't get a second
+// one. IP is recorded too, to throttle someone inventing many fake matrics.
+// ---------------------------------------------------------------------------
+
+export function normalizeMatric(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+interface TrialRow {
+  matric: string;
+  ip: string | null;
+  name: string | null;
+  started: number | null;
+  exp: number | null;
+}
+
+/** Has this matric number already taken a trial? */
+export async function trialExistsForMatric(matric: string): Promise<boolean> {
+  if (!kvConfigured()) return false;
+  try {
+    const r = await sb(
+      `${TRIALS}?matric=eq.${encodeURIComponent(matric)}&select=matric`,
+      { method: "GET" },
+    );
+    if (!r.ok) return false;
+    const rows = (await r.json()) as TrialRow[];
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** How many trials this IP started since `sinceMs` (0 = all time). Used as a
+ *  soft abuse throttle — kept lenient because campus/mobile networks share IPs. */
+export async function trialCountForIp(ip: string, sinceMs = 0): Promise<number> {
+  if (!kvConfigured() || !ip) return 0;
+  try {
+    const since = sinceMs ? `&started=gt.${sinceMs}` : "";
+    const r = await sb(
+      `${TRIALS}?ip=eq.${encodeURIComponent(ip)}${since}&select=matric&limit=200`,
+      { method: "GET" },
+    );
+    if (!r.ok) return 0;
+    const rows = (await r.json()) as TrialRow[];
+    return rows.length;
+  } catch {
+    return 0;
+  }
+}
+
+export interface TrialRecord {
+  matric: string;
+  ip?: string;
+  name?: string;
+  started: number;
+  exp: number;
+}
+
+/** All recorded trials, most recent first (founder monitoring). */
+export async function listTrials(): Promise<TrialRecord[]> {
+  if (!kvConfigured()) return [];
+  try {
+    const r = await sb(`${TRIALS}?select=*&order=started.desc&limit=2000`, {
+      method: "GET",
+    });
+    if (!r.ok) return [];
+    const rows = (await r.json()) as TrialRow[];
+    return rows.map((row) => ({
+      matric: row.matric,
+      ip: row.ip ?? undefined,
+      name: row.name ?? undefined,
+      started: row.started ?? 0,
+      exp: row.exp ?? 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Record a started trial. Returns false only on a hard write failure. */
+export async function recordTrial(
+  matric: string,
+  ip: string,
+  name: string,
+  exp: number,
+): Promise<boolean> {
+  if (!kvConfigured()) return true; // nothing to record, allow
+  try {
+    const r = await sb(TRIALS, {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({
+        matric,
+        ip: ip || null,
+        name: name || null,
+        started: Date.now(),
+        exp,
+      }),
     });
     return r.ok;
   } catch {

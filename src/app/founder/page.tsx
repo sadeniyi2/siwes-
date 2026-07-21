@@ -31,6 +31,14 @@ interface CodeRow {
   uses: number;
   created: number;
 }
+interface TrialRow {
+  matric: string;
+  ip?: string;
+  name?: string;
+  started: number;
+  exp: number;
+  ipCount: number;
+}
 interface Data {
   admin: string;
   stats: {
@@ -39,12 +47,14 @@ interface Data {
     basicSales: number;
     proSales: number;
     totalUsers: number;
+    trialsTaken: number;
     activeTrials: number;
     expiredTrials: number;
     onlineNow: number;
   };
   sales: Sale[];
   users: UserRow[];
+  trials: TrialRow[];
   tracking: boolean;
   salesError: string | null;
 }
@@ -86,7 +96,7 @@ export default function FounderPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<Data | null>(null);
-  const [tab, setTab] = useState<"sales" | "users" | "codes">("sales");
+  const [tab, setTab] = useState<"sales" | "users" | "trials" | "codes">("sales");
 
   useEffect(() => {
     setToken(localStorage.getItem(TOKEN_KEY));
@@ -269,10 +279,10 @@ export default function FounderPage() {
             <Stat label="Sales" value={data.stats.salesCount} />
             <Stat label="Users" value={data.stats.totalUsers} />
             <Stat label="Online now" value={data.stats.onlineNow} tone="text-accent" />
-            <Stat label="Basic sold" value={data.stats.basicSales} />
-            <Stat label="Pro sold" value={data.stats.proSales} />
+            <Stat label="Trials taken" value={data.stats.trialsTaken} />
             <Stat label="Active trials" value={data.stats.activeTrials} tone="text-accent" />
             <Stat label="Expired trials" value={data.stats.expiredTrials} tone="text-ink-faint" />
+            <Stat label="Pro / Basic sold" value={`${data.stats.proSales} / ${data.stats.basicSales}`} />
           </div>
 
           {data.salesError && (
@@ -290,7 +300,7 @@ export default function FounderPage() {
           )}
 
           <div className="mb-3 flex gap-1 rounded-full border border-ink/10 bg-paper p-1 text-sm w-fit">
-            {(["sales", "users", "codes"] as const).map((t) => (
+            {(["sales", "users", "trials", "codes"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -298,7 +308,13 @@ export default function FounderPage() {
                   tab === t ? "bg-accent text-white shadow-lift" : "text-ink-soft"
                 }`}
               >
-                {t === "sales" ? "Sales" : t === "users" ? "Users & trials" : "Free codes"}
+                {t === "sales"
+                  ? "Sales"
+                  : t === "users"
+                    ? "Users"
+                    : t === "trials"
+                      ? "Trials"
+                      : "Free codes"}
               </button>
             ))}
           </div>
@@ -396,6 +412,67 @@ export default function FounderPage() {
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
                           {timeAgo(u.lastSeen)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : tab === "trials" ? (
+              <table className="w-full min-w-[680px] text-sm">
+                <thead>
+                  <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
+                    <th className="px-4 py-3">Matric no.</th>
+                    <th className="px-4 py-3">Student</th>
+                    <th className="px-4 py-3">IP address</th>
+                    <th className="px-4 py-3">Started</th>
+                    <th className="px-4 py-3">Trial left</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.trials.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                        No trials taken yet.
+                      </td>
+                    </tr>
+                  )}
+                  {data.trials.map((t) => {
+                    const expired = t.exp <= Date.now();
+                    const flagged = t.ipCount >= 3;
+                    return (
+                      <tr
+                        key={t.matric}
+                        className={`border-b border-ink/5 ${
+                          flagged ? "bg-amber-400/10" : ""
+                        }`}
+                      >
+                        <td className="px-4 py-3 font-mono font-medium">
+                          {t.matric}
+                        </td>
+                        <td className="px-4 py-3">{t.name || "—"}</td>
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-xs">{t.ip || "—"}</span>
+                          {t.ipCount > 1 && (
+                            <span
+                              className={`ml-1.5 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                flagged
+                                  ? "bg-margin/15 text-margin"
+                                  : "bg-ink/10 text-ink-soft"
+                              }`}
+                              title="Number of trials started from this IP"
+                            >
+                              {t.ipCount}× this IP
+                            </span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
+                          {timeAgo(t.started)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={expired ? "text-margin" : "text-accent-dark"}>
+                            {expired ? "expired" : trialLeft(t.exp)}
+                          </span>
                         </td>
                       </tr>
                     );
