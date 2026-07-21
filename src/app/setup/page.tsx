@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { loadApiKey, loadProfile, saveApiKey, saveProfile } from "@/lib/store";
 import { loadTier, saveAccess } from "@/lib/access";
 import { Profile, dayNameFromISO, formatLongDate } from "@/lib/types";
+import BackupCard from "@/components/BackupCard";
 
 const EMPTY: Profile = {
   fullName: "",
@@ -47,6 +48,7 @@ export default function SetupPage() {
   const router = useRouter();
   const [p, setP] = useState<Profile>(EMPTY);
   const [apiKey, setApiKey] = useState("");
+  const [code, setCode] = useState("");
   const [isEdit, setIsEdit] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +84,32 @@ export default function SetupPage() {
       durationWeeks: p.durationWeeks ? Number(p.durationWeeks) : undefined,
     });
     if (apiKey.trim()) saveApiKey(apiKey);
+
+    // An access code grants (or upgrades to) free access immediately — this is
+    // also how a returning user redeems a code by updating their profile.
+    if (code.trim()) {
+      setChecking(true);
+      try {
+        const res = await fetch("/api/access/referral", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, name: fullName }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (res.ok && j.ok) {
+          saveAccess(j.token, j.tier, "free");
+          router.push("/");
+          return;
+        }
+        setChecking(false);
+        setError(j.message || "That code isn't valid.");
+        return;
+      } catch {
+        setChecking(false);
+        setError("Couldn't check that code right now. Please try again.");
+        return;
+      }
+    }
 
     // Already unlocked (paid or free) → straight into the app.
     if (loadTier()) {
@@ -300,6 +328,17 @@ export default function SetupPage() {
           </Field>
         </div>
 
+        <div className="mb-6">
+          <Field label="Access code (optional)">
+            <input
+              className={inputCls}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Have a code? Enter it here"
+            />
+          </Field>
+        </div>
+
         {error && (
           <p className="animate-rise mb-4 rounded-xl border border-margin/30 bg-margin/10 px-4 py-2.5 text-sm text-margin">
             {error}
@@ -325,6 +364,10 @@ export default function SetupPage() {
           )}
         </div>
       </form>
+
+      <div className="mt-4">
+        <BackupCard />
+      </div>
 
       <p className="mt-4 text-center text-xs text-ink-faint">
         Your details are stored only in this browser — nothing is uploaded

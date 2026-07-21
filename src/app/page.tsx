@@ -7,6 +7,7 @@ import AccessGate from "@/components/AccessGate";
 import KeyModal from "@/components/KeyModal";
 import Toast from "@/components/Toast";
 import Tour, { TourStep } from "@/components/Tour";
+import OnboardingProgress from "@/components/OnboardingProgress";
 import {
   Tier,
   isTrial,
@@ -122,11 +123,17 @@ function Assistant({ tier }: { tier: Tier }) {
       setOnTrial(isTrial());
     };
     sync();
+    const openKey = () => setKeyModal("setup");
+    const focusComposer = () => textareaRef.current?.focus();
     window.addEventListener("siwes-key-change", sync);
     window.addEventListener("siwes-access-change", sync);
+    window.addEventListener("siwes-open-key", openKey);
+    window.addEventListener("siwes-focus-composer", focusComposer);
     return () => {
       window.removeEventListener("siwes-key-change", sync);
       window.removeEventListener("siwes-access-change", sync);
+      window.removeEventListener("siwes-open-key", openKey);
+      window.removeEventListener("siwes-focus-composer", focusComposer);
     };
   }, [router]);
 
@@ -296,6 +303,7 @@ function Assistant({ tier }: { tier: Tier }) {
       savedAt: new Date().toISOString(),
     });
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
+    window.dispatchEvent(new Event("siwes-entry-saved"));
     const profile = loadProfile();
     const week = profile ? weekNumberOf(entry.date, profile.startDate) : 1;
     setToast(
@@ -332,6 +340,8 @@ function Assistant({ tier }: { tier: Tier }) {
           }
         }}
       />
+
+      <OnboardingProgress />
 
       <div className="mb-3 flex items-center gap-2">
         <div data-tour="actions" className="-mx-3 flex flex-1 gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
