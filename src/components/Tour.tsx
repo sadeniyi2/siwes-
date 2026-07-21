@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface TourStep {
   /** CSS selector of the element to highlight (usually [data-tour="..."]). */
@@ -13,6 +14,10 @@ export interface TourStep {
  * Lightweight guided tour. Highlights real elements on the page with a spotlight
  * + tooltip and Next/Back/Skip controls. Auto-starts once per storageKey, and
  * restarts on the global "siwes-start-tour" event (fired by the ? Help button).
+ *
+ * Rendered through a portal to document.body so the fixed-position spotlight is
+ * anchored to the viewport (not to any transformed page wrapper) — this is what
+ * keeps the highlight aligned with the real element.
  */
 export default function Tour({
   steps,
@@ -21,10 +26,13 @@ export default function Tour({
   steps: TourStep[];
   storageKey: string;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [index, setIndex] = useState(-1); // -1 = inactive
   const [rect, setRect] = useState<DOMRect | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const [cardH, setCardH] = useState(180);
+  const [cardH, setCardH] = useState(190);
+
+  useEffect(() => setMounted(true), []);
 
   const finish = useCallback(() => {
     try {
@@ -45,7 +53,7 @@ export default function Tour({
       /* ignore */
     }
     let t: ReturnType<typeof setTimeout> | undefined;
-    if (!seen) t = setTimeout(() => setIndex(0), 700);
+    if (!seen) t = setTimeout(() => setIndex(0), 800);
     const start = () => setIndex(0);
     window.addEventListener("siwes-start-tour", start);
     return () => {
@@ -55,7 +63,10 @@ export default function Tour({
   }, [storageKey]);
 
   const visible = (el: HTMLElement | null) =>
-    !!el && el.offsetParent !== null && el.getBoundingClientRect().width > 0;
+    !!el &&
+    el.offsetParent !== null &&
+    el.getBoundingClientRect().width > 0 &&
+    el.getBoundingClientRect().height > 0;
 
   // Resolve the current step's element (skipping any that aren't on the page).
   useEffect(() => {
@@ -74,16 +85,28 @@ export default function Tour({
       setIndex(i);
       return;
     }
-    el!.scrollIntoView({ block: "center", behavior: "smooth" });
-    const update = () => setRect(el!.getBoundingClientRect());
-    update();
-    const t = setTimeout(update, 350);
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
+    const target = el!;
+    // Bring it into view instantly (smooth scrolling makes measuring unreliable).
+    target.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
+
+    const measure = () => setRect(target.getBoundingClientRect());
+    // Measure now and again as layout/scroll settle.
+    let raf = requestAnimationFrame(() => {
+      measure();
+      raf = requestAnimationFrame(measure);
+    });
+    const timers = [
+      setTimeout(measure, 120),
+      setTimeout(measure, 300),
+      setTimeout(measure, 600),
+    ];
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
     return () => {
-      clearTimeout(t);
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
+      cancelAnimationFrame(raf);
+      timers.forEach(clearTimeout);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
     };
   }, [index, steps, finish]);
 
@@ -91,20 +114,23 @@ export default function Tour({
     if (cardRef.current) setCardH(cardRef.current.offsetHeight);
   }, [index, rect]);
 
-  if (index < 0 || !rect) return null;
+  if (!mounted || index < 0 || !rect) return null;
   const step = steps[index];
 
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
   const pad = 6;
-  const holeTop = rect.top - pad;
-  const holeLeft = rect.left - pad;
-  const holeW = rect.width + pad * 2;
+  const holeTop = Math.max(4, rect.top - pad);
+  const holeLeft = Math.max(4, rect.left - pad);
+  const holeW = Math.min(rect.width + pad * 2, vw - holeLeft - 4);
   const holeH = rect.height + pad * 2;
 
-  const vw = typeof window !== "undefined" ? window.innerWidth : 360;
-  const vh = typeof window !== "undefined" ? window.innerHeight : 640;
   const cardW = Math.min(320, vw - 24);
-  const below = rect.bottom + 12 + cardH < vh;
-  const cardTop = below ? rect.bottom + 12 : Math.max(12, rect.top - cardH - 12);
+  const below = rect.bottom + 14 + cardH < vh;
+  const cardTop = below
+    ? Math.min(rect.bottom + 12, vh - cardH - 12)
+    : Math.max(12, rect.top - cardH - 12);
   const cardLeft = Math.min(
     Math.max(12, rect.left + rect.width / 2 - cardW / 2),
     vw - cardW - 12,
@@ -112,11 +138,11 @@ export default function Tour({
 
   const isLast = index === steps.length - 1;
 
-  return (
-    <div className="fixed inset-0 z-[80] print:hidden" aria-live="polite">
+  return createPortal(
+    <div className="fixed inset-0 z-[9998] print:hidden" aria-live="polite">
       {/* Spotlight: a hole punched through a dark overlay */}
       <div
-        className="pointer-events-none absolute rounded-xl ring-2 ring-white transition-all duration-300"
+        className="pointer-events-none fixed rounded-xl ring-[3px] ring-accent transition-all duration-200"
         style={{
           top: holeTop,
           left: holeLeft,
@@ -128,7 +154,7 @@ export default function Tour({
       {/* Tooltip card */}
       <div
         ref={cardRef}
-        className="animate-pop absolute rounded-2xl border border-ink/10 bg-paper-sheet p-4 shadow-sheet"
+        className="animate-pop fixed z-[9999] rounded-2xl border border-ink/10 bg-paper-sheet p-4 shadow-sheet"
         style={{ top: cardTop, left: cardLeft, width: cardW }}
       >
         <div className="mb-1 flex items-center justify-between">
@@ -173,6 +199,7 @@ export default function Tour({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -226,9 +226,10 @@ export default function FounderPage() {
           )}
           {!data.tracking && (
             <p className="mb-3 rounded-xl border border-accent/30 bg-accent-wash px-4 py-2.5 text-sm text-accent-deep">
-              User &amp; trial tracking is off. Add a free Upstash Redis
-              (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN) to see who&apos;s
-              logged in and their trial left. Sales above still work.
+              User &amp; trial tracking is off. Add a free Supabase project
+              (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) and create the{" "}
+              <code className="rounded bg-white px-1">siwes_users</code> table to
+              see who&apos;s logged in and their trial left. Sales above still work.
             </p>
           )}
 

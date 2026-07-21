@@ -395,7 +395,7 @@ export default function UnlockPage() {
         .
       </p>
 
-      <Tour steps={UNLOCK_TOUR} storageKey="siwes.tour.unlock.v1" />
+      <Tour steps={UNLOCK_TOUR} storageKey="siwes.tour.unlock.v2" />
     </div>
   );
 }
