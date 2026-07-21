@@ -26,6 +26,10 @@ export interface LogEntry {
   description: string;
   /** The raw notes the student typed, kept for report building */
   rawNotes?: string;
+  /** Optional attached photos, stored as compressed data URLs */
+  photos?: string[];
+  /** Optional skill/competency tags for this day */
+  skills?: string[];
   savedAt: string;
 }
 

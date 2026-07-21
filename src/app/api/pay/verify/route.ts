@@ -106,5 +106,13 @@ export async function POST(req: NextRequest) {
     iat: Date.now(),
   });
 
-  return Response.json({ ok: true, token, tier, email });
+  return Response.json({
+    ok: true,
+    token,
+    tier,
+    email,
+    amount,
+    txRef,
+    transactionId: txId,
+  });
 }

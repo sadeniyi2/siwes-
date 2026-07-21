@@ -46,19 +46,18 @@ export default function BackupCard() {
       <p className="mb-4 mt-1 text-sm leading-relaxed text-ink-soft">
         Your logbook lives only in this browser. Download a backup file to keep a
         copy — then you can restore it if you clear your history or move to
-        another phone or laptop.{" "}
-        <span className="font-medium text-ink">Free for everyone.</span>
+        another phone or laptop.
       </p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <button onClick={onExport} type="button" className="btn-primary">
-          ⭳ Download backup
+          Download backup
         </button>
         <button
           onClick={() => fileRef.current?.click()}
           type="button"
           className="btn-ghost"
         >
-          ⭱ Restore from file
+          Restore from file
         </button>
         <input
           ref={fileRef}

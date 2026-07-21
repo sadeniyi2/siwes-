@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile } from "@/lib/store";
 import { PLANS, TRIAL_DAYS, Tier, loadTier, saveAccess, saveTrial, trialUsed } from "@/lib/access";
+import { downloadReceipt, ReceiptData } from "@/lib/receipt";
 import Tour, { TourStep } from "@/components/Tour";
 
 const UNLOCK_TOUR: TourStep[] = [
@@ -90,6 +91,7 @@ export default function UnlockPage() {
   const [code, setCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
 
   // Preload the payment script as soon as the page opens.
   useEffect(() => {
@@ -142,7 +144,19 @@ export default function UnlockPage() {
       return;
     }
     saveAccess(j.token, j.tier, "paid");
-    router.replace("/");
+    // Show a success screen with a downloadable receipt (instead of redirecting
+    // straight away, so the student can save their receipt).
+    setReceipt({
+      receiptNo: String(j.txRef || `siwes-${j.tier}`).replace(/^siwes-/, "").slice(0, 24).toUpperCase(),
+      date: new Date().toISOString(),
+      name: name.trim() || j.email || "SIWES student",
+      email: (j.email || email).trim(),
+      plan: PLANS[(j.tier as Tier) ?? "basic"].name,
+      amount: Number(j.amount) || PLANS[(j.tier as Tier) ?? "basic"].price,
+      transactionId: j.transactionId ?? transactionId,
+      reference: j.txRef || "—",
+    });
+    setPaying(null);
   }
 
   async function redeem() {
@@ -233,6 +247,55 @@ export default function UnlockPage() {
       },
       onclose: () => setPaying((p) => (p === tier ? null : p)),
     });
+  }
+
+  if (receipt) {
+    return (
+      <div className="mx-auto max-w-md py-10 text-center">
+        <div className="stagger">
+          <p className="animate-pop mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-3xl text-white shadow-lift">
+            ✓
+          </p>
+          <h1 className="mb-2 font-display text-2xl font-semibold tracking-tight">
+            Payment successful
+          </h1>
+          <p className="mb-1 text-sm text-ink-soft">
+            You now have full <strong>{receipt.plan}</strong> access for your
+            whole placement. A receipt has been prepared for your records.
+          </p>
+          <div className="my-5 rounded-2xl border border-ink/10 bg-paper-sheet p-4 text-left text-sm shadow-card">
+            <div className="flex justify-between py-1">
+              <span className="text-ink-faint">Plan</span>
+              <span className="font-medium">{receipt.plan}</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-ink-faint">Amount paid</span>
+              <span className="font-medium">
+                ₦{receipt.amount.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-ink-faint">Receipt #</span>
+              <span className="font-mono text-xs">{receipt.receiptNo}</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => downloadReceipt(receipt)}
+              className="btn-ghost"
+            >
+              ⭳ Download receipt (PDF)
+            </button>
+            <button
+              onClick={() => router.replace("/")}
+              className="btn-primary"
+            >
+              Enter the app →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
