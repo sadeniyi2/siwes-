@@ -208,6 +208,24 @@ export default function FounderPage() {
     }
   }
 
+  // Remove a duplicate / suspected-fraud record, then refresh.
+  const manage = useCallback(
+    async (action: string, id: string, confirmMsg: string) => {
+      if (!token || !window.confirm(confirmMsg)) return;
+      try {
+        await fetch("/api/founder/manage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-founder-token": token },
+          body: JSON.stringify({ action, id }),
+        });
+        load(token);
+      } catch {
+        /* ignore */
+      }
+    },
+    [token, load],
+  );
+
   // ---- Login screen ----
   if (!token) {
     return (
@@ -366,12 +384,13 @@ export default function FounderPage() {
                     <th className="px-4 py-3">Plan</th>
                     <th className="px-4 py-3">Trial left</th>
                     <th className="px-4 py-3">Last seen</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.users.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-ink-faint">
+                      <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
                         No users tracked yet.
                       </td>
                     </tr>
@@ -413,6 +432,20 @@ export default function FounderPage() {
                         <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
                           {timeAgo(u.lastSeen)}
                         </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() =>
+                              manage(
+                                "delete-user",
+                                u.id,
+                                `Remove ${u.name || "this user"} from your monitoring list? This only deletes the tracking record, not their access.`,
+                              )
+                            }
+                            className="text-xs font-medium text-margin hover:underline"
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -427,12 +460,13 @@ export default function FounderPage() {
                     <th className="px-4 py-3">IP address</th>
                     <th className="px-4 py-3">Started</th>
                     <th className="px-4 py-3">Trial left</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.trials.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                      <td colSpan={6} className="px-4 py-8 text-center text-ink-faint">
                         No trials taken yet.
                       </td>
                     </tr>
@@ -473,6 +507,20 @@ export default function FounderPage() {
                           <span className={expired ? "text-margin" : "text-accent-dark"}>
                             {expired ? "expired" : trialLeft(t.exp)}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() =>
+                              manage(
+                                "delete-trial",
+                                t.matric,
+                                `Delete the trial record for ${t.matric}? This removes it from the list and lets that matric number start a fresh trial. Only do this for a duplicate or a mistake.`,
+                              )
+                            }
+                            className="text-xs font-medium text-margin hover:underline"
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     );

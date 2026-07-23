@@ -302,6 +302,33 @@ export async function trialCountForIp(ip: string, sinceMs = 0): Promise<number> 
   }
 }
 
+/** Remove a trial record (frees that matric to start a trial again). */
+export async function deleteTrial(matric: string): Promise<boolean> {
+  if (!kvConfigured() || !matric.trim()) return false;
+  try {
+    const r = await sb(
+      `${TRIALS}?matric=eq.${encodeURIComponent(normalizeMatric(matric))}`,
+      { method: "DELETE" },
+    );
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Remove a tracked user record. */
+export async function deleteUser(id: string): Promise<boolean> {
+  if (!kvConfigured() || !id.trim()) return false;
+  try {
+    const r = await sb(`${TABLE}?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 export interface TrialRecord {
   matric: string;
   ip?: string;
