@@ -39,6 +39,12 @@ interface TrialRow {
   exp: number;
   ipCount: number;
 }
+interface BlockRow {
+  value: string;
+  type: string;
+  reason?: string;
+  created: number;
+}
 interface Data {
   admin: string;
   stats: {
@@ -96,7 +102,9 @@ export default function FounderPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<Data | null>(null);
-  const [tab, setTab] = useState<"sales" | "users" | "trials" | "codes">("sales");
+  const [tab, setTab] = useState<
+    "sales" | "users" | "trials" | "codes" | "blocks"
+  >("sales");
 
   useEffect(() => {
     setToken(localStorage.getItem(TOKEN_KEY));
@@ -189,6 +197,37 @@ export default function FounderPage() {
   useEffect(() => {
     if (token && tab === "codes" && codes === null) codesApi({ action: "list" });
   }, [token, tab, codes, codesApi]);
+
+  // ---- Blocklist ----
+  const [blocks, setBlocks] = useState<BlockRow[] | null>(null);
+  const [blockValue, setBlockValue] = useState("");
+  const [blockType, setBlockType] = useState<"matric" | "ip">("matric");
+  const [blockReason, setBlockReason] = useState("");
+  const [blockMsg, setBlockMsg] = useState<string | null>(null);
+
+  const blocksApi = useCallback(
+    async (payload: Record<string, unknown>) => {
+      if (!token) return;
+      setBlockMsg(null);
+      try {
+        const res = await fetch("/api/founder/blocks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-founder-token": token },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        if (j.ok) setBlocks(j.blocks);
+        else setBlockMsg(j.message || "Something went wrong.");
+      } catch {
+        setBlockMsg("Network error. Please try again.");
+      }
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    if (token && tab === "blocks" && blocks === null) blocksApi({ action: "list" });
+  }, [token, tab, blocks, blocksApi]);
 
   function randomCode() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -318,7 +357,7 @@ export default function FounderPage() {
           )}
 
           <div className="mb-3 flex gap-1 rounded-full border border-ink/10 bg-paper p-1 text-sm w-fit">
-            {(["sales", "users", "trials", "codes"] as const).map((t) => (
+            {(["sales", "users", "trials", "codes", "blocks"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -332,12 +371,14 @@ export default function FounderPage() {
                     ? "Users"
                     : t === "trials"
                       ? "Trials"
-                      : "Free codes"}
+                      : t === "codes"
+                        ? "Free codes"
+                        : "Blocked"}
               </button>
             ))}
           </div>
 
-          {tab !== "codes" && (
+          {tab !== "codes" && tab !== "blocks" && (
           <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-paper-sheet shadow-card">
             {tab === "sales" ? (
               <table className="w-full min-w-[560px] text-sm">
@@ -508,7 +549,45 @@ export default function FounderPage() {
                             {expired ? "expired" : trialLeft(t.exp)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <button
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Block matric ${t.matric} from ALL future trials? (Paying still works.)`,
+                                )
+                              )
+                                blocksApi({
+                                  action: "add",
+                                  type: "matric",
+                                  value: t.matric,
+                                  reason: t.name || "",
+                                });
+                            }}
+                            className="text-xs font-medium text-accent-dark hover:underline"
+                          >
+                            Block
+                          </button>
+                          {t.ip && (
+                            <button
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `Block IP ${t.ip} from ALL future trials? Note: campus/mobile networks share IPs, so this can affect other students.`,
+                                  )
+                                )
+                                  blocksApi({
+                                    action: "add",
+                                    type: "ip",
+                                    value: t.ip,
+                                    reason: `from ${t.matric}`,
+                                  });
+                              }}
+                              className="ml-2 text-xs font-medium text-accent-dark hover:underline"
+                            >
+                              Block IP
+                            </button>
+                          )}
                           <button
                             onClick={() =>
                               manage(
@@ -517,7 +596,7 @@ export default function FounderPage() {
                                 `Delete the trial record for ${t.matric}? This removes it from the list and lets that matric number start a fresh trial. Only do this for a duplicate or a mistake.`,
                               )
                             }
-                            className="text-xs font-medium text-margin hover:underline"
+                            className="ml-2 text-xs font-medium text-margin hover:underline"
                           >
                             Delete
                           </button>
@@ -659,6 +738,112 @@ export default function FounderPage() {
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {tab === "blocks" && (
+            <div className="rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-card">
+              <h2 className="font-display text-base font-semibold">
+                Blocklist
+              </h2>
+              <p className="mb-4 mt-0.5 text-sm text-ink-soft">
+                A blocked matric number or IP can never start a free trial
+                (paying still works). Use the <strong>Block</strong> buttons on
+                the Trials tab, or add one manually below.
+              </p>
+
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+                <select
+                  value={blockType}
+                  onChange={(e) => setBlockType(e.target.value as "matric" | "ip")}
+                  className="rounded-xl border border-ink/15 bg-paper-sheet px-3 py-2.5 text-sm outline-none focus:border-accent"
+                >
+                  <option value="matric">Matric no.</option>
+                  <option value="ip">IP address</option>
+                </select>
+                <input
+                  value={blockValue}
+                  onChange={(e) => setBlockValue(e.target.value)}
+                  placeholder={blockType === "matric" ? "e.g. 20/52HA093" : "e.g. 102.89.x.x"}
+                  className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <input
+                  value={blockReason}
+                  onChange={(e) => setBlockReason(e.target.value)}
+                  placeholder="Reason (optional)"
+                  className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <button
+                  onClick={() => {
+                    if (!blockValue.trim()) return;
+                    blocksApi({
+                      action: "add",
+                      type: blockType,
+                      value: blockValue,
+                      reason: blockReason,
+                    });
+                    setBlockValue("");
+                    setBlockReason("");
+                  }}
+                  disabled={!blockValue.trim()}
+                  className="btn-primary shrink-0 disabled:opacity-50"
+                  type="button"
+                >
+                  Block
+                </button>
+              </div>
+
+              {blockMsg && (
+                <p className="mb-3 rounded-xl border border-margin/30 bg-margin/10 px-3 py-2 text-sm text-margin">
+                  {blockMsg}
+                </p>
+              )}
+
+              <div className="overflow-x-auto rounded-xl border border-ink/10">
+                <table className="w-full min-w-[480px] text-sm">
+                  <thead>
+                    <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
+                      <th className="px-4 py-3">Blocked value</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Reason</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {blocks === null && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-ink-faint">
+                          Loading…
+                        </td>
+                      </tr>
+                    )}
+                    {blocks?.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-ink-faint">
+                          Nothing blocked. Add one above or from the Trials tab.
+                        </td>
+                      </tr>
+                    )}
+                    {blocks?.map((b) => (
+                      <tr key={b.value} className="border-b border-ink/5">
+                        <td className="px-4 py-3 font-mono font-medium">{b.value}</td>
+                        <td className="px-4 py-3 uppercase text-ink-soft">{b.type}</td>
+                        <td className="px-4 py-3 text-ink-faint">{b.reason || "—"}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() =>
+                              blocksApi({ action: "remove", value: b.value })
+                            }
+                            className="text-xs font-medium text-accent-dark hover:underline"
+                          >
+                            Unblock
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

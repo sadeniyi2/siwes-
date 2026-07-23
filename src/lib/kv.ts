@@ -26,12 +26,17 @@ import "server-only";
 //     ip text, name text,
 //     started bigint, exp bigint
 //   );
+//   create table if not exists siwes_blocks (
+//     value text primary key,   -- a matric number or an IP address
+//     type text, reason text, created bigint
+//   );
 
 const SB_URL = process.env.SUPABASE_URL || "";
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const TABLE = "siwes_users";
 const CODES = "siwes_codes";
 const TRIALS = "siwes_trials";
+const BLOCKS = "siwes_blocks";
 
 export function kvConfigured(): boolean {
   return !!SB_URL && !!SB_KEY;
@@ -299,6 +304,101 @@ export async function trialCountForIp(ip: string, sinceMs = 0): Promise<number> 
     return rows.length;
   } catch {
     return 0;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Blocklist. A matric number or IP on the list is permanently barred from the
+// free trial (paying is unaffected). Used to ban a known fraudster for good.
+// ---------------------------------------------------------------------------
+
+export interface BlockRecord {
+  value: string;
+  type: string; // matric | ip
+  reason?: string;
+  created: number;
+}
+
+interface BlockRow {
+  value: string;
+  type: string | null;
+  reason: string | null;
+  created: number | null;
+}
+
+/** Is this matric or IP on the blocklist? */
+export async function isBlocked(matric: string, ip: string): Promise<boolean> {
+  if (!kvConfigured()) return false;
+  const values = [normalizeMatric(matric), ip]
+    .map((v) => v.trim())
+    .filter(Boolean);
+  if (values.length === 0) return false;
+  try {
+    const list = values.map((v) => `"${v.replace(/"/g, "")}"`).join(",");
+    const r = await sb(
+      `${BLOCKS}?select=value&value=in.(${encodeURIComponent(list)})`,
+      { method: "GET" },
+    );
+    if (!r.ok) return false;
+    const rows = (await r.json()) as BlockRow[];
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function listBlocks(): Promise<BlockRecord[]> {
+  if (!kvConfigured()) return [];
+  try {
+    const r = await sb(`${BLOCKS}?select=*&order=created.desc&limit=1000`, {
+      method: "GET",
+    });
+    if (!r.ok) return [];
+    const rows = (await r.json()) as BlockRow[];
+    return rows.map((row) => ({
+      value: row.value,
+      type: row.type ?? "matric",
+      reason: row.reason ?? undefined,
+      created: row.created ?? 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function addBlock(
+  type: "matric" | "ip",
+  rawValue: string,
+  reason?: string,
+): Promise<boolean> {
+  if (!kvConfigured() || !rawValue.trim()) return false;
+  const value = type === "matric" ? normalizeMatric(rawValue) : rawValue.trim();
+  try {
+    const r = await sb(BLOCKS, {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({
+        value,
+        type,
+        reason: reason?.trim() || null,
+        created: Date.now(),
+      }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function removeBlock(value: string): Promise<boolean> {
+  if (!kvConfigured() || !value.trim()) return false;
+  try {
+    const r = await sb(`${BLOCKS}?value=eq.${encodeURIComponent(value.trim())}`, {
+      method: "DELETE",
+    });
+    return r.ok;
+  } catch {
+    return false;
   }
 }
 

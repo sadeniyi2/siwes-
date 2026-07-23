@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { signAccess } from "@/lib/token";
 import {
+  isBlocked,
   kvConfigured,
   normalizeMatric,
   recordTrial,
@@ -79,6 +80,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const ip = clientIp(req);
+
+  // Blocklist — a banned matric or IP can never take a trial.
+  if (await isBlocked(matric, ip)) {
+    return Response.json(
+      {
+        ok: false,
+        reason: "blocked",
+        message:
+          "This account isn't eligible for the free trial. Please choose a plan, or contact support if you think this is a mistake.",
+      },
+      { status: 403 },
+    );
+  }
+
   // One trial per matric number — the hard block.
   if (await trialExistsForMatric(matric)) {
     return Response.json(
@@ -93,7 +109,6 @@ export async function POST(req: NextRequest) {
   }
 
   // Soft IP throttle to stop one person inventing many matric numbers.
-  const ip = clientIp(req);
   const since = Date.now() - 24 * 60 * 60 * 1000;
   if (ip && (await trialCountForIp(ip, since)) >= IP_LIMIT) {
     return Response.json(
