@@ -93,11 +93,64 @@ export default function UnlockPage() {
   const [showEnded, setShowEnded] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [matric, setMatric] = useState("");
+  const [claiming, setClaiming] = useState(false);
 
   // Preload the payment script as soon as the page opens.
   useEffect(() => {
     loadFlutterwave();
   }, []);
+
+  // Activation link (?access=<token>) — used by the founder's manual "Activate"
+  // button. Validate it, store it, and go straight into the app.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("access");
+    if (!t) return;
+    (async () => {
+      try {
+        const res = await fetch("/api/access/status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: t }),
+        });
+        const j = await res.json();
+        if (j.valid) {
+          saveAccess(t, j.tier, j.kind ?? "paid");
+          router.replace("/");
+        } else {
+          setError("That activation link is invalid or has expired.");
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [router]);
+
+  async function claimPaid() {
+    if (!email.trim() || !email.includes("@")) {
+      setError("Enter the email you paid with to restore your access.");
+      return;
+    }
+    setError(null);
+    setClaiming(true);
+    try {
+      const res = await fetch("/api/pay/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name }),
+      });
+      const j = await res.json();
+      if (res.ok && j.ok) {
+        saveAccess(j.token, j.tier, "paid");
+        router.replace("/");
+        return;
+      }
+      setError(j.message || "We couldn't find a completed payment for that email.");
+    } catch {
+      setError("Couldn't check your payment right now. Please try again.");
+    } finally {
+      setClaiming(false);
+    }
+  }
 
   // Invisible safety net: if one of the invited names lands here, unlock them
   // silently by their profile name. There is no visible free-access UI.
@@ -543,6 +596,24 @@ export default function UnlockPage() {
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-ink/10 bg-paper-sheet p-4 text-center shadow-card">
+        <p className="text-sm font-medium text-ink">
+          Already paid but still locked?
+        </p>
+        <p className="mx-auto mt-0.5 max-w-md text-xs text-ink-soft">
+          If you paid (card, transfer or USSD) but you&apos;re still on the trial,
+          type the <strong>email you paid with</strong> in the Email box above,
+          then tap here to unlock your access instantly.
+        </p>
+        <button
+          onClick={claimPaid}
+          disabled={claiming}
+          className="btn-ghost mx-auto mt-3 disabled:opacity-60"
+        >
+          {claiming ? "Checking your payment…" : "Restore my access"}
+        </button>
       </div>
 
       <p className="mt-5 text-center text-xs text-ink-faint">

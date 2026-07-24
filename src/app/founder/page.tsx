@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 const TOKEN_KEY = "siwes.founder.token.v1";
 
@@ -29,7 +29,9 @@ interface CodeRow {
   tier: string;
   note?: string;
   uses: number;
+  maxUses?: number;
   created: number;
+  redeemers?: { name?: string; ip?: string; at: number }[];
 }
 interface TrialRow {
   matric: string;
@@ -171,8 +173,10 @@ export default function FounderPage() {
   const [codes, setCodes] = useState<CodeRow[] | null>(null);
   const [newCode, setNewCode] = useState("");
   const [newNote, setNewNote] = useState("");
+  const [newDevices, setNewDevices] = useState("3");
   const [codeMsg, setCodeMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
 
   const codesApi = useCallback(
     async (payload: Record<string, unknown>) => {
@@ -246,6 +250,34 @@ export default function FounderPage() {
       /* ignore */
     }
   }
+
+  // Manually activate a buyer: mint a paid token and copy an activation link
+  // to send them (e.g. on WhatsApp). They open it and they're upgraded.
+  const [activateInfo, setActivateInfo] = useState<{ who: string; link: string } | null>(null);
+  const activate = useCallback(
+    async (email: string, name: string, tier: string) => {
+      if (!token) return;
+      try {
+        const res = await fetch("/api/founder/manage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-founder-token": token },
+          body: JSON.stringify({ action: "grant", email, name, tier }),
+        });
+        const j = await res.json();
+        if (!j.ok) return;
+        const link = `${window.location.origin}/unlock?access=${encodeURIComponent(j.token)}`;
+        try {
+          await navigator.clipboard.writeText(link);
+        } catch {
+          /* clipboard may be blocked; link is still shown */
+        }
+        setActivateInfo({ who: name || email || "buyer", link });
+      } catch {
+        /* ignore */
+      }
+    },
+    [token],
+  );
 
   // Remove a duplicate / suspected-fraud record, then refresh.
   const manage = useCallback(
@@ -356,6 +388,25 @@ export default function FounderPage() {
             </p>
           )}
 
+          {activateInfo && (
+            <div className="mb-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <p className="font-semibold">
+                Activation link for {activateInfo.who} — copied to clipboard ✓
+              </p>
+              <p className="mt-1 break-all font-mono text-xs">{activateInfo.link}</p>
+              <p className="mt-1 text-xs text-emerald-800">
+                Send this link to the buyer on WhatsApp. When they open it, they
+                get Pro instantly.{" "}
+                <button
+                  onClick={() => setActivateInfo(null)}
+                  className="font-medium underline"
+                >
+                  Dismiss
+                </button>
+              </p>
+            </div>
+          )}
+
           <div className="mb-3 flex gap-1 rounded-full border border-ink/10 bg-paper p-1 text-sm w-fit">
             {(["sales", "users", "trials", "codes", "blocks"] as const).map((t) => (
               <button
@@ -388,12 +439,13 @@ export default function FounderPage() {
                     <th className="px-4 py-3">Customer</th>
                     <th className="px-4 py-3">Plan</th>
                     <th className="px-4 py-3">Amount</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.sales.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-ink-faint">
+                      <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
                         No sales yet.
                       </td>
                     </tr>
@@ -412,6 +464,15 @@ export default function FounderPage() {
                       <td className="px-4 py-3 capitalize">{s.tier}</td>
                       <td className="px-4 py-3 font-semibold text-emerald-600">
                         {naira(s.amount)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <button
+                          onClick={() => activate(s.email, s.name, s.tier)}
+                          title="Mint a Pro activation link to send this buyer"
+                          className="text-xs font-medium text-accent-dark hover:underline"
+                        >
+                          Activate →
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -645,6 +706,17 @@ export default function FounderPage() {
                   placeholder="Note (who it's for) — optional"
                   className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
                 />
+                <label className="flex shrink-0 items-center gap-1.5 rounded-xl border border-ink/15 bg-paper-sheet px-3 py-2.5 text-sm">
+                  <span className="whitespace-nowrap text-ink-faint">Devices</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={newDevices}
+                    onChange={(e) => setNewDevices(e.target.value)}
+                    className="w-14 bg-transparent text-center outline-none"
+                    title="How many devices can redeem this code"
+                  />
+                </label>
                 <button
                   onClick={randomCode}
                   className="btn-ghost shrink-0"
@@ -656,9 +728,17 @@ export default function FounderPage() {
                   onClick={() => {
                     const c = newCode.trim();
                     if (!c) return;
-                    codesApi({ action: "add", code: c, tier: "pro", note: newNote });
+                    const devices = Math.max(1, Math.floor(Number(newDevices) || 1));
+                    codesApi({
+                      action: "add",
+                      code: c,
+                      tier: "pro",
+                      note: newNote,
+                      maxUses: devices,
+                    });
                     setNewCode("");
                     setNewNote("");
+                    setNewDevices("3");
                   }}
                   disabled={!newCode.trim() || !data.tracking}
                   className="btn-primary shrink-0 disabled:opacity-50"
@@ -680,7 +760,7 @@ export default function FounderPage() {
                     <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
                       <th className="px-4 py-3">Code</th>
                       <th className="px-4 py-3">Grants</th>
-                      <th className="px-4 py-3">Used</th>
+                      <th className="px-4 py-3">Used / devices</th>
                       <th className="px-4 py-3">Note</th>
                       <th className="px-4 py-3"></th>
                     </tr>
@@ -702,8 +782,12 @@ export default function FounderPage() {
                     )}
                     {codes?.map((c) => {
                       const fromEnv = c.created === 0;
+                      const redeemers = c.redeemers ?? [];
+                      const expanded = expandedCode === c.code;
+                      const exhausted = c.maxUses != null && c.uses >= c.maxUses;
                       return (
-                        <tr key={c.code} className="border-b border-ink/5">
+                        <Fragment key={c.code}>
+                        <tr className="border-b border-ink/5">
                           <td className="px-4 py-3">
                             <button
                               onClick={() => copyCode(c.code)}
@@ -719,23 +803,94 @@ export default function FounderPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 capitalize">{c.tier}</td>
-                          <td className="px-4 py-3 text-ink-soft">{c.uses}×</td>
+                          <td className="px-4 py-3 text-ink-soft">
+                            <button
+                              onClick={() =>
+                                redeemers.length > 0 &&
+                                setExpandedCode(expanded ? null : c.code)
+                              }
+                              className={redeemers.length > 0 ? "hover:underline" : "cursor-default"}
+                            >
+                              <span className={exhausted ? "font-semibold text-margin" : ""}>
+                                {c.uses}
+                                {c.maxUses != null ? ` / ${c.maxUses}` : " / ∞"}
+                              </span>
+                              {redeemers.length > 0 && (
+                                <span className="ml-1.5 text-xs text-accent-dark">
+                                  {redeemers.length} user
+                                  {redeemers.length === 1 ? "" : "s"} {expanded ? "▾" : "▸"}
+                                </span>
+                              )}
+                              {exhausted && (
+                                <span className="ml-1.5 text-[10px] font-semibold uppercase text-margin">
+                                  full
+                                </span>
+                              )}
+                            </button>
+                          </td>
                           <td className="px-4 py-3 text-ink-faint">
                             {fromEnv ? "from environment" : c.note || "—"}
                           </td>
-                          <td className="px-4 py-3 text-right">
+                          <td className="whitespace-nowrap px-4 py-3 text-right">
                             {!fromEnv && (
-                              <button
-                                onClick={() =>
-                                  codesApi({ action: "delete", code: c.code })
-                                }
-                                className="text-xs font-medium text-margin hover:underline"
-                              >
-                                Delete
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => {
+                                    const val = window.prompt(
+                                      "How many devices can use this code? (leave blank for unlimited)",
+                                      c.maxUses != null ? String(c.maxUses) : "",
+                                    );
+                                    if (val === null) return;
+                                    const n =
+                                      val.trim() === ""
+                                        ? 0
+                                        : Math.max(0, Math.floor(Number(val) || 0));
+                                    codesApi({ action: "setlimit", code: c.code, maxUses: n });
+                                  }}
+                                  className="text-xs font-medium text-accent-dark hover:underline"
+                                >
+                                  Limit
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    codesApi({ action: "delete", code: c.code })
+                                  }
+                                  className="ml-2 text-xs font-medium text-margin hover:underline"
+                                >
+                                  Delete
+                                </button>
+                              </>
                             )}
                           </td>
                         </tr>
+                        {expanded && redeemers.length > 0 && (
+                          <tr className="border-b border-ink/5 bg-ink/[0.02]">
+                            <td colSpan={5} className="px-4 py-2.5">
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                                Used by
+                              </p>
+                              <div className="flex flex-col gap-1">
+                                {redeemers.map((u, i) => (
+                                  <div
+                                    key={i}
+                                    className="flex items-center justify-between text-xs"
+                                  >
+                                    <span className="text-ink">
+                                      {u.name || "Unnamed"}
+                                      {u.ip ? (
+                                        <span className="ml-1.5 font-mono text-ink-faint">
+                                          {u.ip}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                    <span className="text-ink-faint">{timeAgo(u.at)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       );
                     })}
                   </tbody>

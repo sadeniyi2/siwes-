@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { verifyAccess } from "@/lib/token";
-import { addCode, deleteCode, kvConfigured, listCodes } from "@/lib/kv";
+import { addCode, deleteCode, kvConfigured, listCodes, setCodeLimit } from "@/lib/kv";
 
 export const runtime = "nodejs";
 
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     code?: string;
     tier?: string;
     note?: string;
+    maxUses?: number;
   } = {};
   try {
     body = await req.json();
@@ -51,11 +52,19 @@ export async function POST(req: NextRequest) {
       );
     }
     const tier = body.tier === "basic" ? "basic" : "pro";
-    const ok = await addCode(code, tier, body.note);
+    const ok = await addCode(code, tier, body.note, body.maxUses);
     if (!ok) {
       return Response.json(
         { ok: false, message: "Could not save the code." },
         { status: 500 },
+      );
+    }
+  } else if (action === "setlimit") {
+    const code = String(body.code ?? "").trim();
+    if (code) {
+      await setCodeLimit(
+        code,
+        typeof body.maxUses === "number" && body.maxUses > 0 ? body.maxUses : null,
       );
     }
   } else if (action === "delete") {

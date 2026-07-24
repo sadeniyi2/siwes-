@@ -35,6 +35,7 @@ const SB_URL = process.env.SUPABASE_URL || "";
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const TABLE = "siwes_users";
 const CODES = "siwes_codes";
+const CODE_USES = "siwes_code_uses";
 const TRIALS = "siwes_trials";
 const BLOCKS = "siwes_blocks";
 
@@ -131,12 +132,20 @@ export async function upsertUser(
 // case-insensitively.
 // ---------------------------------------------------------------------------
 
+export interface CodeUse {
+  name?: string;
+  ip?: string;
+  at: number;
+}
+
 export interface CodeRecord {
   code: string;
   tier: string; // basic | pro (defaults to pro)
   note?: string;
   uses: number;
+  maxUses?: number; // device limit; undefined = unlimited
   created: number;
+  redeemers?: CodeUse[]; // who has used it
 }
 
 interface CodeRow {
@@ -144,6 +153,7 @@ interface CodeRow {
   tier: string | null;
   note: string | null;
   uses: number | null;
+  max_uses: number | null;
   created: number | null;
 }
 
@@ -179,10 +189,13 @@ export async function validateCode(
     const rows = (await r.json()) as CodeRow[];
     const row = rows?.[0];
     if (!row) return null;
+    // Enforce the device limit: once used up, the code stops working.
+    const uses = row.uses ?? 0;
+    if (row.max_uses != null && uses >= row.max_uses) return null;
     // Bump usage counter (best-effort).
     void sb(`${CODES}?code=eq.${encodeURIComponent(code)}`, {
       method: "PATCH",
-      body: JSON.stringify({ uses: (row.uses ?? 0) + 1 }),
+      body: JSON.stringify({ uses: uses + 1 }),
     }).catch(() => {});
     const tier = row.tier === "basic" ? "basic" : "pro";
     return { tier };
@@ -201,17 +214,27 @@ export async function listCodes(): Promise<CodeRecord[]> {
   }));
   if (!kvConfigured()) return env;
   try {
-    const r = await sb(`${CODES}?select=*&order=created.desc&limit=500`, {
-      method: "GET",
-    });
-    if (!r.ok) return env;
-    const rows = (await r.json()) as CodeRow[];
+    const [codesRes, uses] = await Promise.all([
+      sb(`${CODES}?select=*&order=created.desc&limit=500`, { method: "GET" }),
+      listCodeUses(),
+    ]);
+    if (!codesRes.ok) return env;
+    const rows = (await codesRes.json()) as CodeRow[];
+    // Group redeemers by code.
+    const byCode = new Map<string, CodeUse[]>();
+    for (const u of uses) {
+      const arr = byCode.get(u.code) ?? [];
+      arr.push({ name: u.name, ip: u.ip, at: u.at });
+      byCode.set(u.code, arr);
+    }
     const stored = rows.map((row) => ({
       code: row.code,
       tier: row.tier === "basic" ? "basic" : "pro",
       note: row.note ?? undefined,
       uses: row.uses ?? 0,
+      maxUses: row.max_uses ?? undefined,
       created: row.created ?? 0,
+      redeemers: (byCode.get(row.code) ?? []).sort((a, b) => b.at - a.at),
     }));
     return [...stored, ...env];
   } catch {
@@ -223,6 +246,7 @@ export async function addCode(
   code: string,
   tier: "basic" | "pro",
   note?: string,
+  maxUses?: number,
 ): Promise<boolean> {
   if (!kvConfigured() || !code.trim()) return false;
   try {
@@ -234,12 +258,82 @@ export async function addCode(
         tier,
         note: note?.trim() || null,
         uses: 0,
+        max_uses: maxUses && maxUses > 0 ? Math.floor(maxUses) : null,
         created: Date.now(),
       }),
     });
     return r.ok;
   } catch {
     return false;
+  }
+}
+
+/** Change a code's device limit without resetting its usage count. */
+export async function setCodeLimit(
+  code: string,
+  maxUses: number | null,
+): Promise<boolean> {
+  if (!kvConfigured() || !code.trim()) return false;
+  try {
+    const r = await sb(`${CODES}?code=eq.${encodeURIComponent(code.trim())}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        max_uses: maxUses && maxUses > 0 ? Math.floor(maxUses) : null,
+      }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+interface CodeUseRow {
+  code: string;
+  name: string | null;
+  ip: string | null;
+  at: number | null;
+}
+
+/** Record who redeemed a code (for the founder's "used by" list). */
+export async function recordCodeUse(
+  code: string,
+  name: string,
+  ip: string,
+): Promise<void> {
+  if (!kvConfigured() || !code.trim()) return;
+  try {
+    await sb(CODE_USES, {
+      method: "POST",
+      body: JSON.stringify({
+        code: code.trim(),
+        name: name || null,
+        ip: ip || null,
+        at: Date.now(),
+      }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+export async function listCodeUses(): Promise<
+  { code: string; name?: string; ip?: string; at: number }[]
+> {
+  if (!kvConfigured()) return [];
+  try {
+    const r = await sb(`${CODE_USES}?select=*&order=at.desc&limit=3000`, {
+      method: "GET",
+    });
+    if (!r.ok) return [];
+    const rows = (await r.json()) as CodeUseRow[];
+    return rows.map((row) => ({
+      code: row.code,
+      name: row.name ?? undefined,
+      ip: row.ip ?? undefined,
+      at: row.at ?? 0,
+    }));
+  } catch {
+    return [];
   }
 }
 
