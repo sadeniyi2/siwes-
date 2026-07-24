@@ -1,8 +1,17 @@
 import { NextRequest } from "next/server";
 import { signAccess } from "@/lib/token";
-import { validateCode } from "@/lib/kv";
+import { recordCodeUse, validateCode } from "@/lib/kv";
 
 export const runtime = "nodejs";
+
+function clientIp(req: NextRequest): string {
+  const xff = req.headers.get("x-forwarded-for") || "";
+  return (
+    xff.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    ""
+  );
+}
 
 /**
  * Redeem an access ("referral") code. A valid code silently grants free access
@@ -39,12 +48,15 @@ export async function POST(req: NextRequest) {
 
   const result = await validateCode(code);
   if (!result) {
-    // Deliberately vague — don't reveal whether codes exist.
+    // Deliberately vague — don't reveal whether a code exists or is used up.
     return Response.json(
-      { ok: false, message: "That code isn't valid." },
+      { ok: false, message: "That code isn't valid or has been used up." },
       { status: 403 },
     );
   }
+
+  // Log who redeemed it, for the founder's "used by" list (best-effort).
+  void recordCodeUse(code, name, clientIp(req));
 
   const token = signAccess({
     email,
