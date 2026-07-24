@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile } from "@/lib/store";
-import { PLANS, TRIAL_DAYS, Tier, loadTier, saveAccess, saveTrial, trialUsed } from "@/lib/access";
+import { PLANS, TRIAL_DAYS, Tier, clientId, loadTier, saveAccess, saveTrial, trialUsed } from "@/lib/access";
 import { downloadReceipt, ReceiptData } from "@/lib/receipt";
 import Tour, { TourStep } from "@/components/Tour";
 
@@ -252,7 +252,7 @@ export default function UnlockPage() {
       const res = await fetch("/api/access/trial", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matric, name }),
+        body: JSON.stringify({ matric, name, device: clientId() }),
       });
       const j = await res.json();
       if (res.ok && j.ok) {

@@ -1,12 +1,15 @@
 import { NextRequest } from "next/server";
+import crypto from "crypto";
 import { signAccess } from "@/lib/token";
 import {
   isBlocked,
   kvConfigured,
   normalizeMatric,
   recordTrial,
+  recordTrialKeys,
   trialCountForIp,
   trialExistsForMatric,
+  trialKeyExists,
 } from "@/lib/kv";
 
 export const runtime = "nodejs";
@@ -44,10 +47,12 @@ export async function POST(req: NextRequest) {
 
   let matricRaw = "";
   let name = "";
+  let device = "";
   try {
     const body = await req.json();
     matricRaw = String(body?.matric ?? "");
     name = String(body?.name ?? "").trim().slice(0, 120);
+    device = String(body?.device ?? "").trim().slice(0, 80);
   } catch {
     /* ignore */
   }
@@ -108,6 +113,29 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Device / fingerprint block — catches someone who clears storage / uses
+  // incognito with a fresh (fake) matric on the same device+network. A browser
+  // id (from the client) plus a server fingerprint of the device+network.
+  const ua = req.headers.get("user-agent") || "";
+  const lang = req.headers.get("accept-language") || "";
+  const fp = crypto
+    .createHash("sha256")
+    .update(`${ip}|${ua}|${lang}`)
+    .digest("hex")
+    .slice(0, 32);
+  const trialKeys = [device ? `d:${device}` : "", `f:${fp}`];
+  if (await trialKeyExists(trialKeys)) {
+    return Response.json(
+      {
+        ok: false,
+        reason: "device_used",
+        message:
+          "A free trial has already been used on this device. Please choose a plan to continue.",
+      },
+      { status: 409 },
+    );
+  }
+
   // Soft IP throttle to stop one person inventing many matric numbers.
   const since = Date.now() - 24 * 60 * 60 * 1000;
   if (ip && (await trialCountForIp(ip, since)) >= IP_LIMIT) {
@@ -127,6 +155,7 @@ export async function POST(req: NextRequest) {
 
   // Record BEFORE issuing so a race can't mint two tokens for one matric.
   await recordTrial(matric, ip, name, exp);
+  void recordTrialKeys(trialKeys);
 
   const token = signAccess({
     email: "",

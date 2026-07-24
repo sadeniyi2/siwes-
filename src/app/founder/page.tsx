@@ -882,9 +882,18 @@ export default function FounderPage() {
                                 Used by {redeemers.length > 0 ? `(${redeemers.length})` : ""}
                               </p>
                               {redeemers.length === 0 ? (
-                                <p className="text-xs text-ink-faint">
-                                  No one has used this code yet.
-                                </p>
+                                c.uses > 0 ? (
+                                  <p className="text-xs text-ink-faint">
+                                    Used {c.uses} time{c.uses === 1 ? "" : "s"}, but
+                                    names weren&apos;t captured. Create the{" "}
+                                    <code className="rounded bg-ink/10 px-1">siwes_code_uses</code>{" "}
+                                    table in Supabase to record who uses it from now on.
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-ink-faint">
+                                    No one has used this code yet.
+                                  </p>
+                                )
                               ) : (
                                 <div className="flex flex-col gap-1">
                                   {redeemers.map((u, i) => (

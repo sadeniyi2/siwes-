@@ -164,13 +164,18 @@ function envCodes(): string[] {
     .filter(Boolean);
 }
 
+/** Codes are stored and matched uppercase, so any typed case works. */
+export function normalizeCode(raw: string): string {
+  return raw.trim().toUpperCase();
+}
+
 /** Validate a code. Returns the tier it grants, or null if invalid.
  *  Checks the env list first, then Supabase. Best-effort increments the
  *  usage counter for Supabase-stored codes. */
 export async function validateCode(
   input: string,
 ): Promise<{ tier: "basic" | "pro" } | null> {
-  const code = input.trim();
+  const code = normalizeCode(input);
   if (!code) return null;
   const lower = code.toLowerCase();
 
@@ -181,6 +186,7 @@ export async function validateCode(
 
   if (!kvConfigured()) return null;
   try {
+    // Match case-insensitively so students can type the code in any case.
     const r = await sb(
       `${CODES}?code=eq.${encodeURIComponent(code)}&select=*`,
       { method: "GET" },
@@ -193,7 +199,7 @@ export async function validateCode(
     const uses = row.uses ?? 0;
     if (row.max_uses != null && uses >= row.max_uses) return null;
     // Bump usage counter (best-effort).
-    void sb(`${CODES}?code=eq.${encodeURIComponent(code)}`, {
+    void sb(`${CODES}?code=eq.${encodeURIComponent(row.code)}`, {
       method: "PATCH",
       body: JSON.stringify({ uses: uses + 1 }),
     }).catch(() => {});
@@ -254,7 +260,7 @@ export async function addCode(
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates" },
       body: JSON.stringify({
-        code: code.trim(),
+        code: normalizeCode(code),
         tier,
         note: note?.trim() || null,
         uses: 0,
@@ -305,7 +311,7 @@ export async function recordCodeUse(
     await sb(CODE_USES, {
       method: "POST",
       body: JSON.stringify({
-        code: code.trim(),
+        code: normalizeCode(code),
         name: name || null,
         ip: ip || null,
         at: Date.now(),
@@ -549,6 +555,46 @@ export async function listTrials(): Promise<TrialRecord[]> {
     }));
   } catch {
     return [];
+  }
+}
+
+// Device / fingerprint keys for trials — an extra layer beyond the matric
+// block. Stored in an OPTIONAL table (siwes_trial_keys): if it doesn't exist,
+// these safely no-op and the matric block still works on its own.
+const TRIAL_KEYS = "siwes_trial_keys";
+
+/** True if any of these device/fingerprint keys has started a trial before. */
+export async function trialKeyExists(keys: string[]): Promise<boolean> {
+  if (!kvConfigured()) return false;
+  const clean = keys.map((k) => k.trim()).filter(Boolean);
+  if (clean.length === 0) return false;
+  try {
+    const list = clean.map((k) => `"${k.replace(/"/g, "")}"`).join(",");
+    const r = await sb(
+      `${TRIAL_KEYS}?select=key&key=in.(${encodeURIComponent(list)})`,
+      { method: "GET" },
+    );
+    if (!r.ok) return false; // table missing / error -> don't block
+    const rows = (await r.json()) as { key: string }[];
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Record device/fingerprint keys for a started trial (best-effort). */
+export async function recordTrialKeys(keys: string[]): Promise<void> {
+  if (!kvConfigured()) return;
+  const clean = keys.map((k) => k.trim()).filter(Boolean);
+  if (clean.length === 0) return;
+  try {
+    await sb(TRIAL_KEYS, {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify(clean.map((key) => ({ key, at: Date.now() }))),
+    });
+  } catch {
+    /* best-effort */
   }
 }
 
