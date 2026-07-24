@@ -787,46 +787,56 @@ export default function FounderPage() {
                       const exhausted = c.maxUses != null && c.uses >= c.maxUses;
                       return (
                         <Fragment key={c.code}>
-                        <tr className="border-b border-ink/5">
+                        <tr
+                          className={`border-b border-ink/5 ${
+                            fromEnv ? "" : "cursor-pointer hover:bg-ink/[0.02]"
+                          }`}
+                          onClick={() =>
+                            !fromEnv && setExpandedCode(expanded ? null : c.code)
+                          }
+                        >
                           <td className="px-4 py-3">
-                            <button
-                              onClick={() => copyCode(c.code)}
-                              title="Click to copy"
-                              className="font-mono font-semibold text-accent-dark hover:underline"
-                            >
+                            <span className="font-mono font-semibold text-accent-dark">
                               {c.code}
+                            </span>
+                            {!fromEnv && (
+                              <span className="ml-1.5 text-[10px] text-ink-faint">
+                                {expanded ? "▾" : "▸"}
+                              </span>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyCode(c.code);
+                              }}
+                              title="Copy code"
+                              className="ml-2 text-xs text-ink-faint hover:text-accent-dark"
+                            >
+                              📋
                             </button>
                             {copied === c.code && (
-                              <span className="ml-2 text-xs text-emerald-600">
+                              <span className="ml-1 text-xs text-emerald-600">
                                 copied ✓
                               </span>
                             )}
                           </td>
                           <td className="px-4 py-3 capitalize">{c.tier}</td>
                           <td className="px-4 py-3 text-ink-soft">
-                            <button
-                              onClick={() =>
-                                redeemers.length > 0 &&
-                                setExpandedCode(expanded ? null : c.code)
-                              }
-                              className={redeemers.length > 0 ? "hover:underline" : "cursor-default"}
-                            >
-                              <span className={exhausted ? "font-semibold text-margin" : ""}>
-                                {c.uses}
-                                {c.maxUses != null ? ` / ${c.maxUses}` : " / ∞"}
+                            <span className={exhausted ? "font-semibold text-margin" : ""}>
+                              {c.uses}
+                              {c.maxUses != null ? ` / ${c.maxUses}` : " / ∞"}
+                            </span>
+                            {redeemers.length > 0 && (
+                              <span className="ml-1.5 text-xs text-accent-dark">
+                                · {redeemers.length} user
+                                {redeemers.length === 1 ? "" : "s"}
                               </span>
-                              {redeemers.length > 0 && (
-                                <span className="ml-1.5 text-xs text-accent-dark">
-                                  {redeemers.length} user
-                                  {redeemers.length === 1 ? "" : "s"} {expanded ? "▾" : "▸"}
-                                </span>
-                              )}
-                              {exhausted && (
-                                <span className="ml-1.5 text-[10px] font-semibold uppercase text-margin">
-                                  full
-                                </span>
-                              )}
-                            </button>
+                            )}
+                            {exhausted && (
+                              <span className="ml-1.5 text-[10px] font-semibold uppercase text-margin">
+                                full
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-ink-faint">
                             {fromEnv ? "from environment" : c.note || "—"}
@@ -835,7 +845,8 @@ export default function FounderPage() {
                             {!fromEnv && (
                               <>
                                 <button
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     const val = window.prompt(
                                       "How many devices can use this code? (leave blank for unlimited)",
                                       c.maxUses != null ? String(c.maxUses) : "",
@@ -852,9 +863,10 @@ export default function FounderPage() {
                                   Limit
                                 </button>
                                 <button
-                                  onClick={() =>
-                                    codesApi({ action: "delete", code: c.code })
-                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    codesApi({ action: "delete", code: c.code });
+                                  }}
                                   className="ml-2 text-xs font-medium text-margin hover:underline"
                                 >
                                   Delete
@@ -863,30 +875,36 @@ export default function FounderPage() {
                             )}
                           </td>
                         </tr>
-                        {expanded && redeemers.length > 0 && (
+                        {expanded && (
                           <tr className="border-b border-ink/5 bg-ink/[0.02]">
                             <td colSpan={5} className="px-4 py-2.5">
                               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                                Used by
+                                Used by {redeemers.length > 0 ? `(${redeemers.length})` : ""}
                               </p>
-                              <div className="flex flex-col gap-1">
-                                {redeemers.map((u, i) => (
-                                  <div
-                                    key={i}
-                                    className="flex items-center justify-between text-xs"
-                                  >
-                                    <span className="text-ink">
-                                      {u.name || "Unnamed"}
-                                      {u.ip ? (
-                                        <span className="ml-1.5 font-mono text-ink-faint">
-                                          {u.ip}
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                    <span className="text-ink-faint">{timeAgo(u.at)}</span>
-                                  </div>
-                                ))}
-                              </div>
+                              {redeemers.length === 0 ? (
+                                <p className="text-xs text-ink-faint">
+                                  No one has used this code yet.
+                                </p>
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  {redeemers.map((u, i) => (
+                                    <div
+                                      key={i}
+                                      className="flex items-center justify-between text-xs"
+                                    >
+                                      <span className="text-ink">
+                                        {u.name || "Unnamed"}
+                                        {u.ip ? (
+                                          <span className="ml-1.5 font-mono text-ink-faint">
+                                            {u.ip}
+                                          </span>
+                                        ) : null}
+                                      </span>
+                                      <span className="text-ink-faint">{timeAgo(u.at)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )}
