@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     totalUsers: users.length,
     trialsTaken: trials.length,
     activeTrials: trials.filter((t) => t.exp > now).length,
-    expiredTrials: trials.filter((t) => t.exp <= now).length,
+    expiredTrials: trials.filter((t) => t.exp > 0 && t.exp <= now).length,
     onlineNow: users.filter((u) => now - u.lastSeen < 5 * 60 * 1000).length,
   };
 

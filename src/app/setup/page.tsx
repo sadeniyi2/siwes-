@@ -365,6 +365,32 @@ export default function SetupPage() {
         </div>
       </form>
 
+      <div className="mt-4 rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-card">
+        <h2 className="font-display text-sm font-bold uppercase tracking-widest text-accent-deep">
+          Official NACOS templates
+        </h2>
+        <p className="mb-3 mt-1 text-sm leading-relaxed text-ink-soft">
+          The assistant writes your report and defense slides in this exact
+          structure. Download the official guides to format your final document.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <a
+            href="/NACOS-SIWES-Report-Guide.docx"
+            download
+            className="btn-ghost justify-start"
+          >
+            📄 Report master-guide (Word)
+          </a>
+          <a
+            href="/NACOS-SIWES-Defense-Slides-Template.docx"
+            download
+            className="btn-ghost justify-start"
+          >
+            🎤 Defense slides template (Word)
+          </a>
+        </div>
+      </div>
+
       <div className="mt-4">
         <BackupCard />
       </div>

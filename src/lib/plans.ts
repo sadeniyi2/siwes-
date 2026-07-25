@@ -42,7 +42,8 @@ export const PLANS: Record<Tier, PlanInfo> = {
     benefits: [
       "Everything in Basic, plus:",
       "Generate Monthly Summaries",
-      "Build the complete Final SIWES Report — cover page, certification, abstract, table of contents, weekly & monthly activities, right through to the appendix",
+      "Build the complete Final SIWES Report in the official NACOS format — title page, dedication, acknowledgements, all 5 chapters (ITF, company, tools, work done, conclusion), references and appendix",
+      "Generate your NACOS Defense Slide Deck (9 slides, 6×6 rule) with speaker notes",
       "Smart visuals: flowcharts, ER diagrams, system architectures and more for your report appendix",
       "Attach photos and skill/competency tags to each logbook day",
       "Voice typing — just speak your day and it becomes a neat entry",
@@ -59,6 +60,8 @@ export const PLANS: Record<Tier, PlanInfo> = {
 export const PRO_TRIGGERS = [
   "generate monthly summary",
   "build final report",
+  "build defense slides",
+  "defense slide",
   "generate table of contents",
   "summarize skills gained",
   "suggest a diagram",
