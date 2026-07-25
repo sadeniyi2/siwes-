@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import Mermaid from "./Mermaid";
 import { wordCount } from "@/lib/types";
 import { exportMarkdownDocx, looksLikeDocument } from "@/lib/reportDocx";
+import { exportSlidesPptx, looksLikeSlides } from "@/lib/slidesPptx";
 
 function inferFileBase(content: string): string {
   if (/(^|\n)\s*#{1,3}\s*slide\s*\d|defense slide/i.test(content))
@@ -101,6 +102,8 @@ export default function AssistantMessage({
 }) {
   const segments = parseAssistantContent(content);
   const [saving, setSaving] = useState(false);
+  const [savingPptx, setSavingPptx] = useState(false);
+  const isSlides = !streaming && looksLikeSlides(content);
   const showDownload = !streaming && looksLikeDocument(content);
 
   async function downloadWord() {
@@ -111,6 +114,17 @@ export default function AssistantMessage({
       /* ignore */
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function downloadPptx() {
+    setSavingPptx(true);
+    try {
+      await exportSlidesPptx(content);
+    } catch {
+      /* ignore */
+    } finally {
+      setSavingPptx(false);
     }
   }
 
@@ -207,13 +221,27 @@ export default function AssistantMessage({
           </div>
         );
       })}
-      {showDownload && (
+      {(showDownload || isSlides) && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink/10 pt-3">
+          {isSlides && (
+            <button
+              onClick={downloadPptx}
+              disabled={savingPptx}
+              title="Download a designed PowerPoint deck with speaker notes"
+              className="btn bg-accent px-3.5 py-1.5 text-xs text-white hover:bg-accent-dark hover:shadow-lift disabled:opacity-60"
+            >
+              {savingPptx ? "Designing…" : "⬇ Download as PowerPoint"}
+            </button>
+          )}
           <button
             onClick={downloadWord}
             disabled={saving}
             title="Download this as an editable Word document"
-            className="btn bg-accent px-3.5 py-1.5 text-xs text-white hover:bg-accent-dark hover:shadow-lift disabled:opacity-60"
+            className={`btn px-3.5 py-1.5 text-xs disabled:opacity-60 ${
+              isSlides
+                ? "border border-ink/15 bg-paper-sheet text-ink-soft hover:border-accent/50 hover:text-accent-dark"
+                : "bg-accent text-white hover:bg-accent-dark hover:shadow-lift"
+            }`}
           >
             {saving ? "Preparing…" : "⬇ Download as Word"}
           </button>
