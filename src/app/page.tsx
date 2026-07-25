@@ -34,11 +34,21 @@ import {
   saveEntry,
 } from "@/lib/store";
 import { ChatMessage, formatLongDate, weekNumberOf } from "@/lib/types";
+import { DEFENSE_SLIDES_BLUEPRINT, FINAL_REPORT_BLUEPRINT } from "@/lib/templates";
 
-const QUICK_ACTIONS = [
+interface QuickAction {
+  label: string;
+  icon: string;
+  pro: boolean;
+  /** Extra instruction sent to the AI without cluttering the chat bubble. */
+  augment?: string;
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
   { label: "Generate Weekly Summary", icon: "🗓", pro: false },
   { label: "Generate Monthly Summary", icon: "🗂", pro: true },
-  { label: "Build Final Report", icon: "📄", pro: true },
+  { label: "Build Final Report", icon: "📄", pro: true, augment: FINAL_REPORT_BLUEPRINT },
+  { label: "Build Defense Slides", icon: "🎤", pro: true, augment: DEFENSE_SLIDES_BLUEPRINT },
   { label: "Improve my last entry", icon: "✨", pro: true },
   { label: "Generate Table of Contents", icon: "🔖", pro: true },
   { label: "Summarize skills gained", icon: "🏷", pro: true },
@@ -177,7 +187,7 @@ function Assistant({ tier }: { tier: Tier }) {
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, []);
 
-  async function send(text: string) {
+  async function send(text: string, augment?: string) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
 
@@ -208,6 +218,13 @@ function Assistant({ tier }: { tier: Tier }) {
     ];
     setMessages(history);
 
+    // What we SEND to the model: same conversation, but the last user turn may
+    // carry an extra instruction (e.g. the report/slides blueprint) that we
+    // don't want cluttering the visible chat bubble.
+    const sentMessages: ChatMessage[] = augment
+      ? [...messages, { role: "user", content: `${trimmed}\n\n${augment}` }]
+      : history.slice(0, -1);
+
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -222,7 +239,7 @@ function Assistant({ tier }: { tier: Tier }) {
         signal: controller.signal,
         body: JSON.stringify({
           // Send the conversation without the empty assistant placeholder
-          messages: history.slice(0, -1).slice(-20),
+          messages: sentMessages.slice(-20),
           memory: (() => {
             const base = buildMemory();
             const dir = tier === "pro" ? prefsDirective(prefs) : "";
@@ -370,7 +387,7 @@ function Assistant({ tier }: { tier: Tier }) {
             <button
               key={a.label}
               disabled={busy}
-              onClick={() => send(a.label)}
+              onClick={() => send(a.label, a.augment)}
               className="chip shrink-0 disabled:opacity-50"
             >
               <span aria-hidden>{a.icon}</span> {a.label}
