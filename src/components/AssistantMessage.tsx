@@ -1,9 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Mermaid from "./Mermaid";
 import { wordCount } from "@/lib/types";
+import { exportMarkdownDocx, looksLikeDocument } from "@/lib/reportDocx";
+
+function inferFileBase(content: string): string {
+  if (/(^|\n)\s*#{1,3}\s*slide\s*\d|defense slide/i.test(content))
+    return "siwes-defense-slides";
+  if (/chapter|abstract|acknowledgement|references|appendix/i.test(content))
+    return "siwes-report";
+  return "siwes-summary";
+}
 
 export interface ParsedEntry {
   day: string;
@@ -90,6 +100,20 @@ export default function AssistantMessage({
   onSuggestion: (label: string) => void;
 }) {
   const segments = parseAssistantContent(content);
+  const [saving, setSaving] = useState(false);
+  const showDownload = !streaming && looksLikeDocument(content);
+
+  async function downloadWord() {
+    setSaving(true);
+    try {
+      await exportMarkdownDocx(content, inferFileBase(content));
+    } catch {
+      /* ignore */
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
       {segments.map((seg, i) => {
@@ -183,6 +207,24 @@ export default function AssistantMessage({
           </div>
         );
       })}
+      {showDownload && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink/10 pt-3">
+          <button
+            onClick={downloadWord}
+            disabled={saving}
+            title="Download this as an editable Word document"
+            className="btn bg-accent px-3.5 py-1.5 text-xs text-white hover:bg-accent-dark hover:shadow-lift disabled:opacity-60"
+          >
+            {saving ? "Preparing…" : "⬇ Download as Word"}
+          </button>
+          <button
+            onClick={() => navigator.clipboard.writeText(content)}
+            className="btn border border-ink/15 bg-paper-sheet px-3.5 py-1.5 text-xs text-ink-soft hover:border-accent/50 hover:text-accent-dark"
+          >
+            Copy all
+          </button>
+        </div>
+      )}
     </div>
   );
 }
