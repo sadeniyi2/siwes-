@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AssistantMessage, { ParsedEntry } from "@/components/AssistantMessage";
 import AccessGate from "@/components/AccessGate";
-import KeyModal from "@/components/KeyModal";
 import Toast from "@/components/Toast";
 import Tour, { TourStep } from "@/components/Tour";
 import OnboardingProgress from "@/components/OnboardingProgress";
@@ -27,7 +26,6 @@ import {
 import {
   buildMemory,
   clearChat,
-  loadApiKey,
   loadChat,
   loadEntries,
   loadProfile,
@@ -86,11 +84,6 @@ const ASSISTANT_TOUR: TourStep[] = [
     body: "When you're ready, generate your weekly summary, monthly summary, or the full final SIWES report from here.",
   },
   {
-    selector: '[data-tour="key"]',
-    title: "Your free AI key",
-    body: "The app runs on your own free Google Gemini key. Tap here anytime to add or change it.",
-  },
-  {
     selector: '[data-tour="nav-logbook"]',
     title: "Your logbook",
     body: "Open the Logbook tab to see your Weekly Progress Chart, edit entries, and print or download them.",
@@ -120,12 +113,7 @@ function Assistant({ tier }: { tier: Tier }) {
   const [lastUserText, setLastUserText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
-  const [hasKey, setHasKey] = useState(true);
-  const [serverKey, setServerKey] = useState(false);
-  const [keyModal, setKeyModal] = useState<
-    null | "setup" | "invalid_key" | "quota"
-  >(null);
-  const [pendingRetry, setPendingRetry] = useState<string | null>(null);
+  const [aiReady, setAiReady] = useState(true);
   const [onTrial, setOnTrial] = useState(false);
   const [countdown, setCountdown] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -144,34 +132,20 @@ function Assistant({ tier }: { tier: Tier }) {
     setMessages(loadChat());
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
     setPrefs(loadPrefs());
-    const sync = () => {
-      setHasKey(!!loadApiKey());
-      setOnTrial(isTrial());
-    };
+    const sync = () => setOnTrial(isTrial());
     sync();
-    // Ask whether the owner has supplied a shared AI key, so we can stop forcing
-    // students to add their own.
+    // The owner provides the AI key(s) centrally; students never handle keys.
+    // We only check whether the assistant is ready so we can show a gentle note
+    // if the owner hasn't added a key yet.
     fetch("/api/ai/status")
       .then((r) => r.json())
-      .then((j) => {
-        setServerKey(!!j.serverKey);
-        try {
-          localStorage.setItem("siwes.serverkey.v1", j.serverKey ? "1" : "0");
-        } catch {
-          /* ignore */
-        }
-      })
-      .catch(() => {});
-    const openKey = () => setKeyModal("setup");
+      .then((j) => setAiReady(!!j.serverKey))
+      .catch(() => setAiReady(true));
     const focusComposer = () => textareaRef.current?.focus();
-    window.addEventListener("siwes-key-change", sync);
     window.addEventListener("siwes-access-change", sync);
-    window.addEventListener("siwes-open-key", openKey);
     window.addEventListener("siwes-focus-composer", focusComposer);
     return () => {
-      window.removeEventListener("siwes-key-change", sync);
       window.removeEventListener("siwes-access-change", sync);
-      window.removeEventListener("siwes-open-key", openKey);
       window.removeEventListener("siwes-focus-composer", focusComposer);
     };
   }, [router]);
@@ -213,15 +187,6 @@ function Assistant({ tier }: { tier: Tier }) {
       return;
     }
 
-    // No key yet? If the owner hasn't supplied a shared key, ask the student to
-    // add their own; otherwise just use the shared key.
-    const key = loadApiKey();
-    if (!key && !serverKey) {
-      setPendingRetry(trimmed);
-      setKeyModal("setup");
-      return;
-    }
-
     setInput("");
     requestAnimationFrame(autoGrow);
     setLastUserText(trimmed);
@@ -249,7 +214,6 @@ function Assistant({ tier }: { tier: Tier }) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-gemini-key": key || "",
           "x-access-token": loadAccessToken(),
           "x-client-id": clientId(),
         },
@@ -280,29 +244,19 @@ function Assistant({ tier }: { tier: Tier }) {
         return;
       }
 
-      // Auth / quota / rate-limit problems come back as JSON with a reason.
+      // Key / quota / rate-limit problems come back as JSON. Students don't
+      // manage keys, so these are always shown as a friendly message.
       if (res.status === 401 || res.status === 429) {
-        let reason = "invalid_key";
         let message = "";
         try {
           const j = await res.json();
-          reason = j.reason || reason;
           message = j.message || "";
         } catch {
           /* ignore */
         }
         setMessages((prev) => prev.slice(0, -2));
         setInput(trimmed);
-        const ownKey = !!loadApiKey();
-        // A daily-limit hit, or the owner's shared key failing, is not something
-        // the student can fix with a key — just tell them.
-        if (reason === "rate_limited" || !ownKey) {
-          setToast(message || "The AI is busy right now. Please try again shortly.");
-          return;
-        }
-        // The student's OWN key is the problem → let them fix it.
-        setPendingRetry(trimmed);
-        setKeyModal(reason === "quota" ? "quota" : "invalid_key");
+        setToast(message || "The AI is busy right now. Please try again shortly.");
         return;
       }
 
@@ -388,21 +342,15 @@ function Assistant({ tier }: { tier: Tier }) {
     >
       <Toast message={toast} onDone={() => setToast(null)} />
       <Tour steps={ASSISTANT_TOUR} storageKey="siwes.tour.assistant.v2" />
-      <KeyModal
-        open={keyModal !== null}
-        reason={keyModal ?? "setup"}
-        onClose={() => {
-          setKeyModal(null);
-          setHasKey(!!loadApiKey());
-          // If a key is now present and a message was waiting, send it.
-          if (loadApiKey() && pendingRetry) {
-            const t = pendingRetry;
-            setPendingRetry(null);
-            setInput("");
-            setTimeout(() => send(t), 0);
-          }
-        }}
-      />
+
+      {!aiReady && (
+        <div className="animate-rise mb-3 flex items-center gap-2.5 rounded-xl border border-amber-300/70 bg-amber-400/10 px-4 py-2.5 text-sm text-ink-soft">
+          <span aria-hidden className="text-lg">
+            ⚙️
+          </span>
+          <p>The assistant is being set up. Please check back shortly.</p>
+        </div>
+      )}
 
       <OnboardingProgress />
       {tier === "pro" && <ProInsights />}
@@ -430,24 +378,6 @@ function Assistant({ tier }: { tier: Tier }) {
           )}
         </div>
         {tier === "pro" && <WritingPrefs value={prefs} onChange={setPrefs} />}
-        <button
-          data-tour="key"
-          onClick={() => setKeyModal("setup")}
-          title={
-            hasKey
-              ? "Your own Gemini key is connected"
-              : serverKey
-                ? "AI is ready — add your own key only if you want"
-                : "Add your Gemini key"
-          }
-          className={`chip shrink-0 ${
-            hasKey || serverKey
-              ? "border-emerald-300 text-emerald-700"
-              : "border-margin/40 text-margin"
-          }`}
-        >
-          🔑 {hasKey ? "Key" : serverKey ? "AI ready" : "Add key"}
-        </button>
         {messages.length > 0 && (
           <button
             onClick={handleClear}
