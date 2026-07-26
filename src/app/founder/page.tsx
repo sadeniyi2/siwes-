@@ -47,6 +47,16 @@ interface BlockRow {
   reason?: string;
   created: number;
 }
+interface AiKeyRow {
+  id: number;
+  masked: string;
+  label?: string;
+  enabled: boolean;
+  status: string;
+  uses: number;
+  lastUsed: number;
+  exhaustedAt: number;
+}
 interface Data {
   admin: string;
   stats: {
@@ -105,7 +115,7 @@ export default function FounderPage() {
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [tab, setTab] = useState<
-    "sales" | "users" | "trials" | "codes" | "blocks"
+    "sales" | "users" | "trials" | "codes" | "blocks" | "aikeys"
   >("sales");
 
   useEffect(() => {
@@ -232,6 +242,36 @@ export default function FounderPage() {
   useEffect(() => {
     if (token && tab === "blocks" && blocks === null) blocksApi({ action: "list" });
   }, [token, tab, blocks, blocksApi]);
+
+  // ---- AI key pool ----
+  const [aiKeys, setAiKeys] = useState<AiKeyRow[] | null>(null);
+  const [newKey, setNewKey] = useState("");
+  const [newKeyLabel, setNewKeyLabel] = useState("");
+  const [aiMsg, setAiMsg] = useState<string | null>(null);
+
+  const aiKeysApi = useCallback(
+    async (payload: Record<string, unknown>) => {
+      if (!token) return;
+      setAiMsg(null);
+      try {
+        const res = await fetch("/api/founder/aikeys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-founder-token": token },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        if (j.ok) setAiKeys(j.keys);
+        else setAiMsg(j.message || "Something went wrong.");
+      } catch {
+        setAiMsg("Network error. Please try again.");
+      }
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    if (token && tab === "aikeys" && aiKeys === null) aiKeysApi({ action: "list" });
+  }, [token, tab, aiKeys, aiKeysApi]);
 
   function randomCode() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -408,7 +448,7 @@ export default function FounderPage() {
           )}
 
           <div className="mb-3 flex gap-1 rounded-full border border-ink/10 bg-paper p-1 text-sm w-fit">
-            {(["sales", "users", "trials", "codes", "blocks"] as const).map((t) => (
+            {(["sales", "users", "trials", "codes", "blocks", "aikeys"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -424,12 +464,14 @@ export default function FounderPage() {
                       ? "Trials"
                       : t === "codes"
                         ? "Free codes"
-                        : "Blocked"}
+                        : t === "blocks"
+                          ? "Blocked"
+                          : "AI keys"}
               </button>
             ))}
           </div>
 
-          {tab !== "codes" && tab !== "blocks" && (
+          {tab !== "codes" && tab !== "blocks" && tab !== "aikeys" && (
           <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-paper-sheet shadow-card">
             {tab === "sales" ? (
               <table className="w-full min-w-[560px] text-sm">
@@ -1026,6 +1068,152 @@ export default function FounderPage() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {tab === "aikeys" && (
+            <div className="rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-card">
+              <h2 className="font-display text-base font-semibold">
+                Shared AI keys
+              </h2>
+              <p className="mb-4 mt-0.5 text-sm text-ink-soft">
+                Add your own free Gemini keys here so students don&apos;t have to.
+                The app uses a healthy key automatically and switches to the next
+                one when a key hits its daily limit (exhausted keys recover after
+                24h). Keys stay private — students never see them. Get keys free
+                at{" "}
+                <a
+                  href="https://aistudio.google.com/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent underline"
+                >
+                  aistudio.google.com/apikey
+                </a>
+                .
+              </p>
+
+              {!data.tracking && (
+                <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+                  Connect Supabase and create the{" "}
+                  <code className="rounded bg-paper-sheet px-1">siwes_ai_keys</code>{" "}
+                  table to manage keys here.
+                </p>
+              )}
+
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value)}
+                  placeholder="Paste a Gemini API key (AIza…)"
+                  className="min-w-0 flex-[2] rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <input
+                  value={newKeyLabel}
+                  onChange={(e) => setNewKeyLabel(e.target.value)}
+                  placeholder="Label (e.g. Olive's key) — optional"
+                  className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <button
+                  onClick={() => {
+                    if (!newKey.trim()) return;
+                    aiKeysApi({ action: "add", key: newKey, label: newKeyLabel });
+                    setNewKey("");
+                    setNewKeyLabel("");
+                  }}
+                  disabled={!newKey.trim() || !data.tracking}
+                  className="btn-primary shrink-0 disabled:opacity-50"
+                  type="button"
+                >
+                  Add key
+                </button>
+              </div>
+
+              {aiMsg && (
+                <p className="mb-3 rounded-xl border border-margin/30 bg-margin/10 px-3 py-2 text-sm text-margin">
+                  {aiMsg}
+                </p>
+              )}
+
+              <div className="overflow-x-auto rounded-xl border border-ink/10">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead>
+                    <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
+                      <th className="px-4 py-3">Key</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Used</th>
+                      <th className="px-4 py-3">Last used</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiKeys === null && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                          Loading…
+                        </td>
+                      </tr>
+                    )}
+                    {aiKeys?.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                          No shared keys yet. Add one above and students stop
+                          being asked for a key.
+                        </td>
+                      </tr>
+                    )}
+                    {aiKeys?.map((k) => {
+                      const badge = !k.enabled
+                        ? "bg-ink/10 text-ink-faint"
+                        : k.status === "exhausted"
+                          ? "bg-amber-400/15 text-amber-700"
+                          : k.status === "invalid"
+                            ? "bg-margin/15 text-margin"
+                            : "bg-emerald-100 text-emerald-700";
+                      const label = !k.enabled ? "disabled" : k.status;
+                      return (
+                        <tr key={k.id} className="border-b border-ink/5">
+                          <td className="px-4 py-3">
+                            <span className="font-mono">{k.masked}</span>
+                            {k.label && (
+                              <span className="ml-2 text-xs text-ink-faint">
+                                {k.label}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${badge}`}
+                            >
+                              {label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-ink-soft">{k.uses}×</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
+                            {k.lastUsed ? timeAgo(k.lastUsed) : "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">
+                            <button
+                              onClick={() =>
+                                aiKeysApi({ action: "toggle", id: k.id, enabled: !k.enabled })
+                              }
+                              className="text-xs font-medium text-accent-dark hover:underline"
+                            >
+                              {k.enabled ? "Disable" : "Enable"}
+                            </button>
+                            <button
+                              onClick={() => aiKeysApi({ action: "delete", id: k.id })}
+                              className="ml-2 text-xs font-medium text-margin hover:underline"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

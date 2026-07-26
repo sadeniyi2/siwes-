@@ -38,6 +38,8 @@ const CODES = "siwes_codes";
 const CODE_USES = "siwes_code_uses";
 const TRIALS = "siwes_trials";
 const BLOCKS = "siwes_blocks";
+const AI_KEYS = "siwes_ai_keys";
+const USAGE = "siwes_usage";
 
 export function kvConfigured(): boolean {
   return !!SB_URL && !!SB_KEY;
@@ -621,6 +623,208 @@ export async function recordTrial(
     return r.ok;
   } catch {
     return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Owner-managed Gemini API key pool. Students who don't bring their own key use
+// one of these (server-side only, never exposed). The chat route rotates to the
+// next key when one hits its quota. An exhausted key auto-recovers after the
+// free-tier daily reset window.
+// ---------------------------------------------------------------------------
+
+const KEY_COOLDOWN = 24 * 60 * 60 * 1000; // exhausted free key usable again after 24h
+
+interface AiKeyRow {
+  id: number;
+  key: string | null;
+  label: string | null;
+  enabled: boolean | null;
+  status: string | null; // healthy | exhausted | invalid
+  uses: number | null;
+  last_used: number | null;
+  exhausted_at: number | null;
+  created: number | null;
+}
+
+export interface AiKeyRecord {
+  id: number;
+  masked: string;
+  label?: string;
+  enabled: boolean;
+  status: string;
+  uses: number;
+  lastUsed: number;
+  exhaustedAt: number;
+}
+
+/** Is at least one usable owner key available (pool or env)? */
+export async function hasServerKey(): Promise<boolean> {
+  if (process.env.GEMINI_API_KEY) return true;
+  if (!kvConfigured()) return false;
+  try {
+    const r = await sb(`${AI_KEYS}?select=id&enabled=eq.true&limit=1`, {
+      method: "GET",
+    });
+    if (!r.ok) return false;
+    const rows = (await r.json()) as AiKeyRow[];
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Pick the next healthy pool key not already tried this request. */
+export async function pickAiKey(
+  excludeIds: number[] = [],
+): Promise<{ id: number; key: string; uses: number } | null> {
+  if (!kvConfigured()) return null;
+  try {
+    const now = Date.now();
+    const r = await sb(
+      `${AI_KEYS}?select=*&enabled=eq.true&order=last_used.asc.nullsfirst&limit=50`,
+      { method: "GET" },
+    );
+    if (!r.ok) return null;
+    const rows = (await r.json()) as AiKeyRow[];
+    for (const row of rows) {
+      if (excludeIds.includes(row.id) || !row.key) continue;
+      const healthy =
+        row.status === "healthy" ||
+        row.status == null ||
+        (row.status === "exhausted" && (row.exhausted_at ?? 0) < now - KEY_COOLDOWN);
+      if (healthy) return { id: row.id, key: row.key, uses: row.uses ?? 0 };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function markAiKeyStatus(
+  id: number,
+  status: "healthy" | "exhausted" | "invalid",
+): Promise<void> {
+  if (!kvConfigured()) return;
+  try {
+    const patch: Record<string, unknown> = { status };
+    if (status === "exhausted") patch.exhausted_at = Date.now();
+    await sb(`${AI_KEYS}?id=eq.${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  } catch {
+    /* best-effort */
+  }
+}
+
+export async function bumpAiKeyUse(id: number, uses: number): Promise<void> {
+  if (!kvConfigured()) return;
+  try {
+    await sb(`${AI_KEYS}?id=eq.${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ uses: uses + 1, last_used: Date.now(), status: "healthy" }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+function maskKey(k: string | null): string {
+  if (!k) return "—";
+  const s = k.trim();
+  return s.length <= 8 ? "••••" : `${s.slice(0, 4)}…${s.slice(-4)}`;
+}
+
+export async function listAiKeys(): Promise<AiKeyRecord[]> {
+  if (!kvConfigured()) return [];
+  try {
+    const r = await sb(`${AI_KEYS}?select=*&order=created.desc&limit=200`, {
+      method: "GET",
+    });
+    if (!r.ok) return [];
+    const rows = (await r.json()) as AiKeyRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      masked: maskKey(row.key),
+      label: row.label ?? undefined,
+      enabled: row.enabled ?? true,
+      status: row.status ?? "healthy",
+      uses: row.uses ?? 0,
+      lastUsed: row.last_used ?? 0,
+      exhaustedAt: row.exhausted_at ?? 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function addAiKey(key: string, label?: string): Promise<boolean> {
+  if (!kvConfigured() || !key.trim()) return false;
+  try {
+    const r = await sb(AI_KEYS, {
+      method: "POST",
+      body: JSON.stringify({
+        key: key.trim(),
+        label: label?.trim() || null,
+        enabled: true,
+        status: "healthy",
+        uses: 0,
+        created: Date.now(),
+      }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteAiKey(id: number): Promise<boolean> {
+  if (!kvConfigured()) return false;
+  try {
+    const r = await sb(`${AI_KEYS}?id=eq.${id}`, { method: "DELETE" });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function setAiKeyEnabled(id: number, enabled: boolean): Promise<boolean> {
+  if (!kvConfigured()) return false;
+  try {
+    const patch: Record<string, unknown> = { enabled };
+    if (enabled) patch.status = "healthy"; // re-enabling clears a bad status
+    const r = await sb(`${AI_KEYS}?id=eq.${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Per-user daily cap for pooled-key usage. Fails open on any store error. */
+export async function checkAndBumpUsage(
+  id: string,
+  limit: number,
+): Promise<{ ok: boolean; count: number }> {
+  if (!kvConfigured() || limit <= 0 || !id) return { ok: true, count: 0 };
+  const day = new Date().toISOString().slice(0, 10);
+  const rowId = `${id}:${day}`;
+  try {
+    const r = await sb(
+      `${USAGE}?select=count&id=eq.${encodeURIComponent(rowId)}`,
+      { method: "GET" },
+    );
+    const rows = r.ok ? ((await r.json()) as { count: number | null }[]) : [];
+    const count = rows[0]?.count ?? 0;
+    if (count >= limit) return { ok: false, count };
+    void sb(USAGE, {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({ id: rowId, day, count: count + 1 }),
+    }).catch(() => {});
+    return { ok: true, count: count + 1 };
+  } catch {
+    return { ok: true, count: 0 };
   }
 }
 

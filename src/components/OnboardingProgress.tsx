@@ -55,8 +55,12 @@ export default function OnboardingProgress() {
     },
     {
       key: "key",
-      label: "Add AI key",
-      done: !!loadApiKey(),
+      label: "AI key",
+      // Done if the student added their own key OR the owner supplies a shared one.
+      done:
+        !!loadApiKey() ||
+        (typeof window !== "undefined" &&
+          localStorage.getItem("siwes.serverkey.v1") === "1"),
       onClick: () => window.dispatchEvent(new Event("siwes-open-key")),
     },
     {

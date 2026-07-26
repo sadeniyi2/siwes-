@@ -18,6 +18,7 @@ import WritingPrefs, {
 } from "@/components/WritingPrefs";
 import {
   Tier,
+  clientId,
   isTrial,
   loadAccessToken,
   trialExpired,
@@ -120,6 +121,7 @@ function Assistant({ tier }: { tier: Tier }) {
   const [toast, setToast] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
   const [hasKey, setHasKey] = useState(true);
+  const [serverKey, setServerKey] = useState(false);
   const [keyModal, setKeyModal] = useState<
     null | "setup" | "invalid_key" | "quota"
   >(null);
@@ -147,6 +149,19 @@ function Assistant({ tier }: { tier: Tier }) {
       setOnTrial(isTrial());
     };
     sync();
+    // Ask whether the owner has supplied a shared AI key, so we can stop forcing
+    // students to add their own.
+    fetch("/api/ai/status")
+      .then((r) => r.json())
+      .then((j) => {
+        setServerKey(!!j.serverKey);
+        try {
+          localStorage.setItem("siwes.serverkey.v1", j.serverKey ? "1" : "0");
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {});
     const openKey = () => setKeyModal("setup");
     const focusComposer = () => textareaRef.current?.focus();
     window.addEventListener("siwes-key-change", sync);
@@ -198,9 +213,10 @@ function Assistant({ tier }: { tier: Tier }) {
       return;
     }
 
-    // No key yet? Remember what they wanted to send and ask for a key first.
+    // No key yet? If the owner hasn't supplied a shared key, ask the student to
+    // add their own; otherwise just use the shared key.
     const key = loadApiKey();
-    if (!key) {
+    if (!key && !serverKey) {
       setPendingRetry(trimmed);
       setKeyModal("setup");
       return;
@@ -233,8 +249,9 @@ function Assistant({ tier }: { tier: Tier }) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-gemini-key": key,
+          "x-gemini-key": key || "",
           "x-access-token": loadAccessToken(),
+          "x-client-id": clientId(),
         },
         signal: controller.signal,
         body: JSON.stringify({
@@ -263,20 +280,29 @@ function Assistant({ tier }: { tier: Tier }) {
         return;
       }
 
-      // Auth / quota problems come back as JSON with a machine-readable reason.
+      // Auth / quota / rate-limit problems come back as JSON with a reason.
       if (res.status === 401 || res.status === 429) {
-        let reason: "invalid_key" | "quota" = "invalid_key";
+        let reason = "invalid_key";
+        let message = "";
         try {
           const j = await res.json();
-          reason = j.reason === "quota" ? "quota" : "invalid_key";
+          reason = j.reason || reason;
+          message = j.message || "";
         } catch {
           /* ignore */
         }
-        // Drop the empty assistant bubble, restore the input, open the modal.
         setMessages((prev) => prev.slice(0, -2));
         setInput(trimmed);
+        const ownKey = !!loadApiKey();
+        // A daily-limit hit, or the owner's shared key failing, is not something
+        // the student can fix with a key — just tell them.
+        if (reason === "rate_limited" || !ownKey) {
+          setToast(message || "The AI is busy right now. Please try again shortly.");
+          return;
+        }
+        // The student's OWN key is the problem → let them fix it.
         setPendingRetry(trimmed);
-        setKeyModal(reason);
+        setKeyModal(reason === "quota" ? "quota" : "invalid_key");
         return;
       }
 
@@ -407,14 +433,20 @@ function Assistant({ tier }: { tier: Tier }) {
         <button
           data-tour="key"
           onClick={() => setKeyModal("setup")}
-          title={hasKey ? "Your Gemini key is connected" : "Add your Gemini key"}
-          className={`chip shrink-0 ${
+          title={
             hasKey
+              ? "Your own Gemini key is connected"
+              : serverKey
+                ? "AI is ready — add your own key only if you want"
+                : "Add your Gemini key"
+          }
+          className={`chip shrink-0 ${
+            hasKey || serverKey
               ? "border-emerald-300 text-emerald-700"
               : "border-margin/40 text-margin"
           }`}
         >
-          🔑 {hasKey ? "Key" : "Add key"}
+          🔑 {hasKey ? "Key" : serverKey ? "AI ready" : "Add key"}
         </button>
         {messages.length > 0 && (
           <button
