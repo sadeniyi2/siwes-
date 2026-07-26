@@ -222,18 +222,16 @@ heading("Free trial & plans");
 bullet(
   "Try everything free for 3 days — just enter your matric number to start. No card needed.",
 );
-bullet("Basic (₦1,500): your daily logbook and weekly summaries.");
+bullet("Basic (N1,500): your daily logbook and weekly summaries.");
 bullet(
-  "Pro (₦2,500): everything, right up to the final report and defense slides.",
+  "Pro (N2,500): everything, up to the final report and defense slides.",
 );
 bullet(
-  "Payment is a one-time fee for your whole placement — secure, through Flutterwave.",
+  "One-time payment for your whole placement — no subscription, paid securely via Flutterwave.",
 );
+bullet("Got an access code? Enter it on the sign-up form for instant access.");
 bullet(
-  "Have an access code? Enter it on the sign-up form for instant access.",
-);
-bullet(
-  "Already paid but still locked? On the unlock page, type the email you paid with and tap 'Restore my access'.",
+  "Already paid but still locked? On the unlock page, enter the email you paid with and tap 'Restore my access'.",
 );
 
 y += 4;

@@ -384,7 +384,7 @@ endobj
 endobj
 8 0 obj
 <<
-/Length 11682
+/Length 11556
 >>
 stream
 0.8503937007874016 w
@@ -540,7 +540,7 @@ BT
 12.0749999999999993 TL
 0.275 0.314 0.42 rg
 73.7007874015748143 529.3419685039368687 Td
-( B a s i c   \( ¦ 1 , 5 0 0 \) :   y o u r   d a i l y   l o g b o o k   a n d   w e e k l y   s u m m a r i e s .) Tj
+(Basic \(N1,500\): your daily logbook and weekly summaries.) Tj
 ET
 0.17 0.31 0.85 rg
 63.7795275590551256 515.4522047244092846 m
@@ -554,7 +554,7 @@ BT
 12.0749999999999993 TL
 0.275 0.314 0.42 rg
 73.7007874015748143 511.7671653543305865 Td
-( P r o   \( ¦ 2 , 5 0 0 \) :   e v e r y t h i n g ,   r i g h t   u p   t o   t h e   f i n a l   r e p o r t   a n d   d e f e n s e   s l i d e s .) Tj
+(Pro \(N2,500\): everything, up to the final report and defense slides.) Tj
 ET
 0.17 0.31 0.85 rg
 63.7795275590551256 497.8774015748030592 m
@@ -568,7 +568,7 @@ BT
 12.0749999999999993 TL
 0.275 0.314 0.42 rg
 73.7007874015748143 494.1923622047243043 Td
-(Payment is a one-time fee for your whole placement — secure, through Flutterwave.) Tj
+(One-time payment for your whole placement — no subscription, paid securely via Flutterwave.) Tj
 ET
 0.17 0.31 0.85 rg
 63.7795275590551256 480.302598425196777 m
@@ -582,7 +582,7 @@ BT
 12.0749999999999993 TL
 0.275 0.314 0.42 rg
 73.7007874015748143 476.6175590551180221 Td
-(Have an access code? Enter it on the sign-up form for instant access.) Tj
+(Got an access code? Enter it on the sign-up form for instant access.) Tj
 ET
 0.17 0.31 0.85 rg
 63.7795275590551256 462.7277952755904948 m
@@ -596,7 +596,7 @@ BT
 12.0749999999999993 TL
 0.275 0.314 0.42 rg
 73.7007874015748143 459.0427559055117399 Td
-(Already paid but still locked? On the unlock page, type the email you paid with and tap 'Restore my) Tj
+(Already paid but still locked? On the unlock page, enter the email you paid with and tap 'Restore my) Tj
 ET
 BT
 /F1 10.5 Tf
@@ -823,7 +823,7 @@ endobj
 23 0 obj
 <<
 /Producer (jsPDF 2.5.2)
-/CreationDate (D:20260726170018-00'00')
+/CreationDate (D:20260726171749-00'00')
 >>
 endobj
 24 0 obj
@@ -837,37 +837,37 @@ endobj
 xref
 0 25
 0000000000 65535 f 
-0000023207 00000 n 
-0000025040 00000 n 
+0000023081 00000 n 
+0000024914 00000 n 
 0000000015 00000 n 
 0000000152 00000 n 
 0000003691 00000 n 
 0000003828 00000 n 
 0000011335 00000 n 
 0000011472 00000 n 
-0000023276 00000 n 
-0000023401 00000 n 
-0000023532 00000 n 
-0000023666 00000 n 
-0000023804 00000 n 
-0000023928 00000 n 
-0000024057 00000 n 
-0000024189 00000 n 
-0000024325 00000 n 
-0000024453 00000 n 
-0000024580 00000 n 
-0000024709 00000 n 
-0000024842 00000 n 
-0000024944 00000 n 
-0000025292 00000 n 
-0000025378 00000 n 
+0000023150 00000 n 
+0000023275 00000 n 
+0000023406 00000 n 
+0000023540 00000 n 
+0000023678 00000 n 
+0000023802 00000 n 
+0000023931 00000 n 
+0000024063 00000 n 
+0000024199 00000 n 
+0000024327 00000 n 
+0000024454 00000 n 
+0000024583 00000 n 
+0000024716 00000 n 
+0000024818 00000 n 
+0000025166 00000 n 
+0000025252 00000 n 
 trailer
 <<
 /Size 25
 /Root 24 0 R
 /Info 23 0 R
-/ID [ <A9142E3FCDA93DE14DF3DAA9AA7EBC19> <A9142E3FCDA93DE14DF3DAA9AA7EBC19> ]
+/ID [ <6902A209A5F0E3FD00EBFDD24C240A68> <6902A209A5F0E3FD00EBFDD24C240A68> ]
 >>
 startxref
-25482
+25356
 %%EOF
