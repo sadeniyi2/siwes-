@@ -24,6 +24,58 @@ function collect(): Record<string, string> {
   return data;
 }
 
+/** Data keys that are safe/useful to sync to the cloud. Access tokens are
+ *  intentionally excluded — cloud backup restores logbook DATA, not access. */
+const CLOUD_KEYS = [
+  "siwes.profile.v1",
+  "siwes.entries.v1",
+  "siwes.chat.v1",
+  "siwes.section",
+];
+
+/** Build a compact snapshot of the student's logbook data for cloud backup.
+ *  If it's too big (usually because of photos), drop photo attachments so the
+ *  logbook text still gets backed up reliably. */
+export function snapshotJSON(maxBytes = 600000): string | null {
+  const data: Record<string, string> = {};
+  for (const k of CLOUD_KEYS) {
+    const v = localStorage.getItem(k);
+    if (v) data[k] = v;
+  }
+  if (!data["siwes.entries.v1"] && !data["siwes.profile.v1"]) return null;
+  let json = JSON.stringify({ v: 1, data });
+  if (json.length > maxBytes && data["siwes.entries.v1"]) {
+    try {
+      const entries = JSON.parse(data["siwes.entries.v1"]);
+      if (Array.isArray(entries)) {
+        for (const e of entries) delete e.photos; // photos are the heavy part
+        data["siwes.entries.v1"] = JSON.stringify(entries);
+        json = JSON.stringify({ v: 1, data });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return json;
+}
+
+/** Apply a cloud snapshot into localStorage. Returns the entry count restored. */
+export function applyCloudJSON(json: string): number {
+  try {
+    const parsed = JSON.parse(json) as { data?: Record<string, string> };
+    const data = parsed?.data;
+    if (!data || typeof data !== "object") return 0;
+    for (const [k, v] of Object.entries(data)) {
+      if (CLOUD_KEYS.includes(k) && typeof v === "string") {
+        localStorage.setItem(k, v);
+      }
+    }
+    return entryCount(data);
+  } catch {
+    return 0;
+  }
+}
+
 /** How many logbook entries a backup holds (for a friendly summary). */
 export function entryCount(data: Record<string, string>): number {
   try {

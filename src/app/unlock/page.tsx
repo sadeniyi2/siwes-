@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadProfile } from "@/lib/store";
+import { loadProfile, saveProfile } from "@/lib/store";
 import { PLANS, TRIAL_DAYS, Tier, clientId, loadTier, saveAccess, saveTrial, trialUsed } from "@/lib/access";
 import { downloadReceipt, ReceiptData } from "@/lib/receipt";
 import Tour, { TourStep } from "@/components/Tour";
@@ -257,6 +257,11 @@ export default function UnlockPage() {
       const j = await res.json();
       if (res.ok && j.ok) {
         saveTrial(j.token, j.exp);
+        // Keep the matric on the profile so their logbook backs up under it.
+        const prof = loadProfile();
+        if (prof && !prof.matricNumber?.trim()) {
+          saveProfile({ ...prof, matricNumber: matric.trim() });
+        }
         router.replace("/");
         return;
       }

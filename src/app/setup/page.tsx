@@ -6,6 +6,7 @@ import { loadProfile, saveProfile } from "@/lib/store";
 import { loadTier, saveAccess } from "@/lib/access";
 import { Profile, dayNameFromISO, formatLongDate } from "@/lib/types";
 import BackupCard from "@/components/BackupCard";
+import { pushCloudBackup } from "@/lib/cloud";
 
 const EMPTY: Profile = {
   fullName: "",
@@ -81,6 +82,7 @@ export default function SetupPage() {
       firmName: p.firmName.trim(),
       durationWeeks: p.durationWeeks ? Number(p.durationWeeks) : undefined,
     });
+    pushCloudBackup();
 
     // An access code grants (or upgrades to) free access immediately — this is
     // also how a returning user redeems a code by updating their profile.

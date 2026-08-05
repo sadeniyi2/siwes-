@@ -15,6 +15,7 @@ import WritingPrefs, {
   loadPrefs,
   prefsDirective,
 } from "@/components/WritingPrefs";
+import { pullCloudBackup, pushCloudBackup } from "@/lib/cloud";
 import {
   Tier,
   clientId,
@@ -132,6 +133,23 @@ function Assistant({ tier }: { tier: Tier }) {
     setMessages(loadChat());
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
     setPrefs(loadPrefs());
+
+    // New phone / cleared history? Pull the logbook back from the cloud.
+    if (loadEntries().length === 0 && profile.matricNumber) {
+      pullCloudBackup(profile.matricNumber).then((n) => {
+        if (n > 0) {
+          setSavedDates(new Set(loadEntries().map((e) => e.date)));
+          setMessages(loadChat());
+          window.dispatchEvent(new Event("siwes-entry-saved"));
+          setToast(
+            `Welcome back — restored ${n} logbook ${n === 1 ? "entry" : "entries"} from your account.`,
+          );
+        }
+      });
+    } else {
+      // Keep the cloud copy fresh with whatever is here.
+      pushCloudBackup();
+    }
     const sync = () => setOnTrial(isTrial());
     sync();
     // The owner provides the AI key(s) centrally; students never handle keys.
@@ -321,6 +339,7 @@ function Assistant({ tier }: { tier: Tier }) {
     });
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
     window.dispatchEvent(new Event("siwes-entry-saved"));
+    pushCloudBackup();
     const profile = loadProfile();
     const week = profile ? weekNumberOf(entry.date, profile.startDate) : 1;
     setToast(

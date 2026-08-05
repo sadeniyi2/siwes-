@@ -8,6 +8,7 @@ import { deleteEntry, loadEntries, loadProfile, saveEntry } from "@/lib/store";
 import { exportLogbookDocx } from "@/lib/docx";
 import { compressImage } from "@/lib/image";
 import { loadTier, Tier } from "@/lib/access";
+import { pushCloudBackup } from "@/lib/cloud";
 import {
   LogEntry,
   Profile,
@@ -140,6 +141,7 @@ function LogbookInner() {
     }
     setEntries(loadEntries());
     setEditingDate(null);
+    pushCloudBackup();
   }
 
   async function addPhotos(files: FileList | null) {

@@ -40,6 +40,7 @@ const TRIALS = "siwes_trials";
 const BLOCKS = "siwes_blocks";
 const AI_KEYS = "siwes_ai_keys";
 const USAGE = "siwes_usage";
+const BACKUPS = "siwes_backups";
 
 export function kvConfigured(): boolean {
   return !!SB_URL && !!SB_KEY;
@@ -825,6 +826,54 @@ export async function checkAndBumpUsage(
     return { ok: true, count: count + 1 };
   } catch {
     return { ok: true, count: 0 };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cloud backup of a student's logbook, keyed by matric number, so their data
+// survives switching phones/browsers or clearing history. Best-effort: if the
+// store is unavailable it simply no-ops and the app keeps working locally.
+// ---------------------------------------------------------------------------
+
+export async function saveBackup(
+  matric: string,
+  name: string,
+  data: string,
+): Promise<boolean> {
+  if (!kvConfigured() || !matric.trim() || !data) return false;
+  try {
+    const r = await sb(BACKUPS, {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({
+        matric: normalizeMatric(matric),
+        name: name || null,
+        data,
+        updated: Date.now(),
+      }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function loadBackup(
+  matric: string,
+): Promise<{ data: string; updated: number } | null> {
+  if (!kvConfigured() || !matric.trim()) return null;
+  try {
+    const r = await sb(
+      `${BACKUPS}?matric=eq.${encodeURIComponent(normalizeMatric(matric))}&select=data,updated`,
+      { method: "GET" },
+    );
+    if (!r.ok) return null;
+    const rows = (await r.json()) as { data: string | null; updated: number | null }[];
+    const row = rows?.[0];
+    if (!row?.data) return null;
+    return { data: row.data, updated: row.updated ?? 0 };
+  } catch {
+    return null;
   }
 }
 
