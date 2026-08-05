@@ -184,6 +184,7 @@ export default function FounderPage() {
   const [newCode, setNewCode] = useState("");
   const [newNote, setNewNote] = useState("");
   const [newDevices, setNewDevices] = useState("3");
+  const [newCodeTier, setNewCodeTier] = useState<"basic" | "pro">("pro");
   const [codeMsg, setCodeMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
@@ -748,6 +749,15 @@ export default function FounderPage() {
                   placeholder="Note (who it's for) — optional"
                   className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
                 />
+                <select
+                  value={newCodeTier}
+                  onChange={(e) => setNewCodeTier(e.target.value as "basic" | "pro")}
+                  title="What this code unlocks"
+                  className="shrink-0 rounded-xl border border-ink/15 bg-paper-sheet px-3 py-2.5 text-sm outline-none focus:border-accent"
+                >
+                  <option value="pro">Grants Pro</option>
+                  <option value="basic">Grants Basic</option>
+                </select>
                 <label className="flex shrink-0 items-center gap-1.5 rounded-xl border border-ink/15 bg-paper-sheet px-3 py-2.5 text-sm">
                   <span className="whitespace-nowrap text-ink-faint">Devices</span>
                   <input
@@ -774,7 +784,7 @@ export default function FounderPage() {
                     codesApi({
                       action: "add",
                       code: c,
-                      tier: "pro",
+                      tier: newCodeTier,
                       note: newNote,
                       maxUses: devices,
                     });
