@@ -34,7 +34,11 @@ import {
   saveEntry,
 } from "@/lib/store";
 import { ChatMessage, formatLongDate, weekNumberOf } from "@/lib/types";
-import { DEFENSE_SLIDES_BLUEPRINT, FINAL_REPORT_BLUEPRINT } from "@/lib/templates";
+import {
+  DEFENSE_SLIDES_BLUEPRINT,
+  FINAL_REPORT_BLUEPRINT,
+  HUMANIZE_BLUEPRINT,
+} from "@/lib/templates";
 
 interface QuickAction {
   label: string;
@@ -49,6 +53,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { label: "Generate Monthly Summary", icon: "🗂", pro: true },
   { label: "Build Final Report", icon: "📄", pro: true, augment: FINAL_REPORT_BLUEPRINT },
   { label: "Build Defense Slides", icon: "🎤", pro: true, augment: DEFENSE_SLIDES_BLUEPRINT },
+  { label: "Make it more human", icon: "🧑", pro: true, augment: HUMANIZE_BLUEPRINT },
   { label: "Improve my last entry", icon: "✨", pro: true },
   { label: "Generate Table of Contents", icon: "🔖", pro: true },
   { label: "Summarize skills gained", icon: "🏷", pro: true },
