@@ -57,6 +57,17 @@ interface AiKeyRow {
   lastUsed: number;
   exhaustedAt: number;
 }
+interface AccountRow {
+  email: string;
+  name: string;
+  tier: string | null;
+  kind: string | null;
+  trialExp: number;
+  matric: string;
+  hasData: boolean;
+  created: number;
+  lastSeen: number;
+}
 interface Data {
   admin: string;
   stats: {
@@ -69,10 +80,14 @@ interface Data {
     activeTrials: number;
     expiredTrials: number;
     onlineNow: number;
+    accounts: number;
+    accountsWithData: number;
+    paidAccounts: number;
   };
   sales: Sale[];
   users: UserRow[];
   trials: TrialRow[];
+  accounts: AccountRow[];
   tracking: boolean;
   salesError: string | null;
 }
@@ -115,7 +130,7 @@ export default function FounderPage() {
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [tab, setTab] = useState<
-    "sales" | "users" | "trials" | "codes" | "blocks" | "aikeys"
+    "sales" | "users" | "accounts" | "trials" | "codes" | "blocks" | "aikeys"
   >("sales");
 
   useEffect(() => {
@@ -408,6 +423,8 @@ export default function FounderPage() {
             <Stat label="Revenue" value={naira(data.stats.revenue)} tone="text-emerald-600" />
             <Stat label="Sales" value={data.stats.salesCount} />
             <Stat label="Users" value={data.stats.totalUsers} />
+            <Stat label="Accounts" value={data.stats.accounts} tone="text-accent" />
+            <Stat label="Logbooks saved" value={data.stats.accountsWithData} tone="text-emerald-600" />
             <Stat label="Online now" value={data.stats.onlineNow} tone="text-accent" />
             <Stat label="Trials taken" value={data.stats.trialsTaken} />
             <Stat label="Active trials" value={data.stats.activeTrials} tone="text-accent" />
@@ -449,7 +466,7 @@ export default function FounderPage() {
           )}
 
           <div className="mb-3 flex gap-1 rounded-full border border-ink/10 bg-paper p-1 text-sm w-fit">
-            {(["sales", "users", "trials", "codes", "blocks", "aikeys"] as const).map((t) => (
+            {(["sales", "users", "accounts", "trials", "codes", "blocks", "aikeys"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -461,13 +478,15 @@ export default function FounderPage() {
                   ? "Sales"
                   : t === "users"
                     ? "Users"
-                    : t === "trials"
-                      ? "Trials"
-                      : t === "codes"
-                        ? "Free codes"
-                        : t === "blocks"
-                          ? "Blocked"
-                          : "AI keys"}
+                    : t === "accounts"
+                      ? "Accounts"
+                      : t === "trials"
+                        ? "Trials"
+                        : t === "codes"
+                          ? "Free codes"
+                          : t === "blocks"
+                            ? "Blocked"
+                            : "AI keys"}
               </button>
             ))}
           </div>
@@ -704,6 +723,78 @@ export default function FounderPage() {
                           >
                             Delete
                           </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : tab === "accounts" ? (
+              <table className="w-full min-w-[680px] text-sm">
+                <thead>
+                  <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
+                    <th className="px-4 py-3">Account</th>
+                    <th className="px-4 py-3">Plan</th>
+                    <th className="px-4 py-3">Logbook</th>
+                    <th className="px-4 py-3">Joined</th>
+                    <th className="px-4 py-3">Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.accounts.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                        No accounts yet. Students appear here once they sign up.
+                      </td>
+                    </tr>
+                  )}
+                  {data.accounts.map((a) => {
+                    const online = Date.now() - a.lastSeen < 5 * 60 * 1000;
+                    return (
+                      <tr key={a.email} className="border-b border-ink/5">
+                        <td className="px-4 py-3">
+                          <p className="flex items-center gap-1.5 font-medium">
+                            {online && (
+                              <span className="h-2 w-2 rounded-full bg-emerald-500" title="online" />
+                            )}
+                            {a.name || "—"}
+                          </p>
+                          <p className="text-xs text-ink-faint">{a.email}</p>
+                          {a.matric && (
+                            <p className="font-mono text-[11px] text-ink-faint">
+                              {a.matric}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {a.tier ? (
+                            <span>
+                              <span className="capitalize">{a.kind ?? "paid"}</span>
+                              <span className="text-ink-faint"> · {a.tier}</span>
+                              {a.kind === "trial" && (
+                                <span className="block text-xs text-ink-faint">
+                                  {trialLeft(a.trialExp)}
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-ink-faint">no plan</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {a.hasData ? (
+                            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
+                              saved
+                            </span>
+                          ) : (
+                            <span className="text-ink-faint">—</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
+                          {a.created ? timeAgo(a.created) : "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
+                          {timeAgo(a.lastSeen)}
                         </td>
                       </tr>
                     );

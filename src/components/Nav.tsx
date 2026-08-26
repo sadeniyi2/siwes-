@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
+import { loadEmail, logout } from "@/lib/access";
 
 const LINKS = [
   { href: "/", label: "Assistant" },
@@ -13,7 +14,23 @@ const LINKS = [
 
 export default function Nav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+
+  // Track the signed-in account so we can show it and offer a way out.
+  useEffect(() => {
+    const sync = () => setEmail(loadEmail());
+    sync();
+    window.addEventListener("siwes-access-change", sync);
+    return () => window.removeEventListener("siwes-access-change", sync);
+  }, [pathname]);
+
+  function signOut() {
+    setOpen(false);
+    logout();
+    router.replace("/login");
+  }
 
   // Close the mobile menu whenever the route changes.
   useEffect(() => {
@@ -58,6 +75,16 @@ export default function Nav() {
           ?
         </button>
         <ThemeToggle className="h-7 w-7 text-ink-faint" />
+        {email && (
+          <button
+            onClick={signOut}
+            title={`Signed in as ${email} — log out`}
+            aria-label="Log out"
+            className="ml-0.5 flex h-7 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-ink-faint transition-colors hover:bg-margin/10 hover:text-margin"
+          >
+            <span aria-hidden>⏻</span> Log out
+          </button>
+        )}
       </nav>
 
       {/* Mobile: theme toggle sits beside the hamburger, always reachable */}
@@ -135,6 +162,19 @@ export default function Nav() {
             >
               ❓ Show tutorial
             </button>
+            {email && (
+              <>
+                <p className="truncate px-4 pt-2 text-xs text-ink-faint">
+                  Signed in as {email}
+                </p>
+                <button
+                  onClick={signOut}
+                  className="rounded-xl bg-paper px-4 py-3 text-left text-base font-medium text-margin transition-all duration-200 hover:bg-margin/10"
+                >
+                  ⏻ Log out
+                </button>
+              </>
+            )}
           </div>
         </nav>
       </div>

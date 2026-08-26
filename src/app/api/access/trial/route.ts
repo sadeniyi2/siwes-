@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import crypto from "crypto";
 import { signAccess } from "@/lib/token";
+import { grantToAccount } from "@/lib/session";
 import {
   isBlocked,
   kvConfigured,
@@ -156,6 +157,24 @@ export async function POST(req: NextRequest) {
   // Record BEFORE issuing so a race can't mint two tokens for one matric.
   await recordTrial(matric, ip, name, exp);
   void recordTrialKeys(trialKeys);
+
+  // If a logged-in account started the trial, attach it to their account so it
+  // follows them across devices (and their logbook stays in the database).
+  const sessionToken = req.headers.get("x-access-token");
+  const granted = await grantToAccount(sessionToken, {
+    tier: "basic",
+    kind: "trial",
+    trialExp: exp,
+  });
+  if (granted) {
+    return Response.json({
+      ok: true,
+      token: granted.token,
+      tier: "basic",
+      kind: "trial",
+      exp,
+    });
+  }
 
   const token = signAccess({
     email: "",

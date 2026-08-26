@@ -31,8 +31,9 @@ export default function AccessGate({
   useEffect(() => {
     let cancelled = false;
     const token = loadAccessToken();
+    // Not logged in at all → send to the login page.
     if (!token) {
-      router.replace("/unlock");
+      router.replace("/login");
       return;
     }
     (async () => {
@@ -44,20 +45,26 @@ export default function AccessGate({
         });
         const j = await res.json();
         if (cancelled) return;
-        if (j.valid) {
-          saveAccess(token, j.tier as Tier, j.kind ?? "paid");
-          setTier(j.tier as Tier);
-          setState("ok");
-          // Report presence for the founder panel (best-effort).
-          const p = loadProfile();
-          trackPresence({ fullName: p?.fullName, firmName: p?.firmName });
-        } else {
+        if (!j.valid) {
+          // Token bad/expired → back to login.
           clearAccess();
-          router.replace("/unlock");
+          router.replace("/login");
+          return;
         }
+        // Keep the freshest token (reflects server-side access changes).
+        const useTier = (j.tier as Tier) || "basic";
+        saveAccess(j.token || token, useTier, j.kind ?? "paid");
+        if (j.access === false) {
+          // Logged in but no plan yet → choose a trial/plan.
+          router.replace("/unlock");
+          return;
+        }
+        setTier(useTier);
+        setState("ok");
+        const p = loadProfile();
+        trackPresence({ fullName: p?.fullName, firmName: p?.firmName });
       } catch {
-        // Network hiccup — fall back to the cached tier rather than lock out a
-        // paid user, but only if a token exists (it does, checked above).
+        // Network hiccup — don't lock out; fall back to the cached tier.
         if (!cancelled) setState("ok");
       }
     })();

@@ -144,9 +144,9 @@ function Assistant({ tier }: { tier: Tier }) {
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
     setPrefs(loadPrefs());
 
-    // New phone / cleared history? Pull the logbook back from the cloud.
-    if (loadEntries().length === 0 && profile.matricNumber) {
-      pullCloudBackup(profile.matricNumber).then((n) => {
+    // New phone / cleared history? Pull the logbook back from the account.
+    if (loadEntries().length === 0) {
+      pullCloudBackup().then((n) => {
         if (n > 0) {
           setSavedDates(new Set(loadEntries().map((e) => e.date)));
           setMessages(loadChat());
@@ -154,10 +154,12 @@ function Assistant({ tier }: { tier: Tier }) {
           setToast(
             `Welcome back — restored ${n} logbook ${n === 1 ? "entry" : "entries"} from your account.`,
           );
+        } else {
+          pushCloudBackup();
         }
       });
     } else {
-      // Keep the cloud copy fresh with whatever is here.
+      // Keep the database copy fresh with whatever is here (auto, silent).
       pushCloudBackup();
     }
     const sync = () => setOnTrial(isTrial());

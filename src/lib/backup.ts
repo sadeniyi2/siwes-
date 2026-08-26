@@ -59,12 +59,23 @@ export function snapshotJSON(maxBytes = 600000): string | null {
   return json;
 }
 
-/** Apply a cloud snapshot into localStorage. Returns the entry count restored. */
+/** Remove the student's cached logbook data (used on logout / account switch). */
+export function clearLocalData() {
+  for (const k of CLOUD_KEYS) localStorage.removeItem(k);
+}
+
+/** True if this browser currently holds any logbook data. */
+export function hasLocalData(): boolean {
+  return CLOUD_KEYS.some((k) => !!localStorage.getItem(k));
+}
+
+/** Replace local logbook data with a cloud snapshot. Returns entry count. */
 export function applyCloudJSON(json: string): number {
   try {
     const parsed = JSON.parse(json) as { data?: Record<string, string> };
     const data = parsed?.data;
     if (!data || typeof data !== "object") return 0;
+    clearLocalData(); // clean replace so accounts never mix on a shared browser
     for (const [k, v] of Object.entries(data)) {
       if (CLOUD_KEYS.includes(k) && typeof v === "string") {
         localStorage.setItem(k, v);

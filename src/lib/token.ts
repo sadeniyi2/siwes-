@@ -7,16 +7,22 @@ export type Kind = "paid" | "free" | "trial";
 
 export interface AccessClaims {
   email: string;
-  tier: Tier;
+  /** Access tier. Absent = a logged-in session with no paid access yet. */
+  tier?: Tier;
   ref: string;
   iat: number;
   kind?: Kind;
-  /** Optional expiry (ms epoch) — used for time-limited trials. */
+  /** Optional expiry (ms epoch) — used for trials and login sessions. */
   exp?: number;
   /** Set to "admin" for founder-panel sessions. */
   role?: "admin";
-  /** Founder display name (olive / peace). */
+  /** Display name (student's name, or founder name). */
   name?: string;
+}
+
+/** True when the claims carry real app access (a paid/trial/free tier). */
+export function hasAccess(claims: AccessClaims | null): boolean {
+  return !!claims && (claims.tier === "basic" || claims.tier === "pro");
 }
 
 const SECRET = process.env.ACCESS_TOKEN_SECRET || "";

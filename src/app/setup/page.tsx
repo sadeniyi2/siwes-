@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadProfile, saveProfile } from "@/lib/store";
-import { loadTier, saveAccess } from "@/lib/access";
+import { loadAccessToken, loadTier, saveAccess } from "@/lib/access";
 import { Profile, dayNameFromISO, formatLongDate } from "@/lib/types";
 import BackupCard from "@/components/BackupCard";
 import { pushCloudBackup } from "@/lib/cloud";
@@ -54,12 +54,17 @@ export default function SetupPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Must be signed in to set up a profile.
+    if (!loadAccessToken()) {
+      router.replace("/login");
+      return;
+    }
     const existing = loadProfile();
     if (existing) {
       setP({ ...EMPTY, ...existing });
       setIsEdit(true);
     }
-  }, []);
+  }, [router]);
 
   function set<K extends keyof Profile>(key: K, value: Profile[K]) {
     setP((prev) => ({ ...prev, [key]: value }));
@@ -91,7 +96,10 @@ export default function SetupPage() {
       try {
         const res = await fetch("/api/access/referral", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-access-token": loadAccessToken(),
+          },
           body: JSON.stringify({ code, name: fullName }),
         });
         const j = await res.json().catch(() => ({}));

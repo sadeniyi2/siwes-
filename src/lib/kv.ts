@@ -877,6 +877,150 @@ export async function loadBackup(
   }
 }
 
+// ---------------------------------------------------------------------------
+// User accounts (email + password). The account row is the source of truth for
+// a student's access (tier/kind) and their logbook data, so their work is never
+// tied to one browser.
+// ---------------------------------------------------------------------------
+
+const ACCOUNTS = "siwes_accounts";
+
+export interface Account {
+  email: string;
+  name?: string;
+  passHash?: string;
+  salt?: string;
+  tier?: string;
+  kind?: string;
+  trialExp?: number;
+  matric?: string;
+  data?: string;
+  created: number;
+  lastSeen: number;
+}
+
+interface AccountRow {
+  email: string;
+  name: string | null;
+  pass_hash: string | null;
+  salt: string | null;
+  tier: string | null;
+  kind: string | null;
+  trial_exp: number | null;
+  matric: string | null;
+  data: string | null;
+  created: number | null;
+  last_seen: number | null;
+}
+
+export function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+function toAccount(row: AccountRow): Account {
+  return {
+    email: row.email,
+    name: row.name ?? undefined,
+    passHash: row.pass_hash ?? undefined,
+    salt: row.salt ?? undefined,
+    tier: row.tier ?? undefined,
+    kind: row.kind ?? undefined,
+    trialExp: row.trial_exp ?? undefined,
+    matric: row.matric ?? undefined,
+    data: row.data ?? undefined,
+    created: row.created ?? 0,
+    lastSeen: row.last_seen ?? 0,
+  };
+}
+
+export async function getAccount(email: string): Promise<Account | null> {
+  if (!kvConfigured()) return null;
+  try {
+    const r = await sb(
+      `${ACCOUNTS}?email=eq.${encodeURIComponent(normalizeEmail(email))}&select=*`,
+      { method: "GET" },
+    );
+    if (!r.ok) return null;
+    const rows = (await r.json()) as AccountRow[];
+    return rows[0] ? toAccount(rows[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Create a new account. Returns false if it already exists or on failure. */
+export async function createAccount(
+  email: string,
+  name: string,
+  passHash: string,
+  salt: string,
+  matric?: string,
+): Promise<boolean> {
+  if (!kvConfigured()) return false;
+  try {
+    const r = await sb(ACCOUNTS, {
+      method: "POST",
+      body: JSON.stringify({
+        email: normalizeEmail(email),
+        name: name || null,
+        pass_hash: passHash,
+        salt,
+        matric: matric?.trim() || null,
+        created: Date.now(),
+        last_seen: Date.now(),
+      }),
+    });
+    return r.ok; // 409 (already exists) -> not ok
+  } catch {
+    return false;
+  }
+}
+
+export async function updateAccount(
+  email: string,
+  patch: Partial<{
+    tier: string | null;
+    kind: string | null;
+    trialExp: number | null;
+    matric: string;
+    name: string;
+    data: string;
+  }>,
+): Promise<boolean> {
+  if (!kvConfigured()) return false;
+  const body: Record<string, unknown> = { last_seen: Date.now() };
+  if ("tier" in patch) body.tier = patch.tier;
+  if ("kind" in patch) body.kind = patch.kind;
+  if ("trialExp" in patch) body.trial_exp = patch.trialExp;
+  if (patch.matric !== undefined) body.matric = patch.matric;
+  if (patch.name !== undefined) body.name = patch.name;
+  if (patch.data !== undefined) body.data = patch.data;
+  try {
+    const r = await sb(
+      `${ACCOUNTS}?email=eq.${encodeURIComponent(normalizeEmail(email))}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    );
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function listAccounts(): Promise<Account[]> {
+  if (!kvConfigured()) return [];
+  try {
+    const r = await sb(
+      `${ACCOUNTS}?select=email,name,tier,kind,trial_exp,matric,created,last_seen&order=last_seen.desc&limit=2000`,
+      { method: "GET" },
+    );
+    if (!r.ok) return [];
+    const rows = (await r.json()) as AccountRow[];
+    return rows.map(toAccount);
+  } catch {
+    return [];
+  }
+}
+
 export async function listUsers(): Promise<UserRecord[]> {
   if (!kvConfigured()) return [];
   try {
