@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Mermaid from "./Mermaid";
@@ -87,7 +87,7 @@ function Markdown({ text }: { text: string }) {
   );
 }
 
-export default function AssistantMessage({
+function AssistantMessage({
   content,
   streaming,
   savedDates,
@@ -253,6 +253,31 @@ export default function AssistantMessage({
           </button>
         </div>
       )}
+      {(showDownload || isSlides) && (
+        <div className="mt-2 rounded-xl border border-accent/20 bg-accent-wash px-3.5 py-3 text-xs leading-relaxed text-ink-soft">
+          <p className="mb-1 font-semibold text-accent-deep">
+            ✅ Before you submit
+          </p>
+          {isSlides ? (
+            <ul className="list-disc space-y-0.5 pl-4">
+              <li>Add your real screenshots / logos where each slide says [Visual: …].</li>
+              <li>Read the speaker notes — practise saying them, don&apos;t read the screen.</li>
+              <li>Check your name, matric and company on the title slide.</li>
+              <li>Keep each slide to a few short lines (6×6 rule).</li>
+            </ul>
+          ) : (
+            <ul className="list-disc space-y-0.5 pl-4">
+              <li>Fill in every [bracketed] prompt with your own detail.</li>
+              <li>Tap <span className="font-medium">Make it more human</span>, then read it once aloud.</li>
+              <li>Add your screenshots / figures where noted, and label them.</li>
+              <li>Check your name, matric, company and the training dates.</li>
+              <li>Download as Word and format it per the NACOS guide before printing.</li>
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+export default memo(AssistantMessage);

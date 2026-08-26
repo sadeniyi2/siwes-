@@ -127,6 +127,11 @@ function Assistant({ tier }: { tier: Tier }) {
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Refs let the message callbacks stay referentially stable, so the (memoized)
+  // chat messages don't re-render on every keystroke in the composer.
+  const lastUserTextRef = useRef("");
+  lastUserTextRef.current = lastUserText;
+  const sendRef = useRef<(t: string, a?: string) => void>(() => {});
 
   useEffect(() => {
     const profile = loadProfile();
@@ -333,13 +338,15 @@ function Assistant({ tier }: { tier: Tier }) {
       abortRef.current = null;
     }
   }
+  sendRef.current = send;
 
-  function handleSaveEntry(entry: ParsedEntry) {
+  // Stable callbacks (via refs) so memoized messages don't re-render while typing.
+  const handleSaveEntry = useCallback((entry: ParsedEntry) => {
     saveEntry({
       date: entry.date,
       day: entry.day,
       description: entry.text,
-      rawNotes: lastUserText || undefined,
+      rawNotes: lastUserTextRef.current || undefined,
       savedAt: new Date().toISOString(),
     });
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
@@ -350,7 +357,11 @@ function Assistant({ tier }: { tier: Tier }) {
     setToast(
       `Saved to logbook — Week ${week}, ${entry.day} ${formatLongDate(entry.date)}`,
     );
-  }
+  }, []);
+
+  const handleSuggestion = useCallback((label: string) => {
+    sendRef.current(label);
+  }, []);
 
   function handleClear() {
     if (confirm("Clear this conversation? Saved logbook entries are kept.")) {
@@ -505,7 +516,7 @@ function Assistant({ tier }: { tier: Tier }) {
                       streaming={busy && isLast}
                       savedDates={savedDates}
                       onSaveEntry={handleSaveEntry}
-                      onSuggestion={(label) => send(label)}
+                      onSuggestion={handleSuggestion}
                     />
                   </div>
                 )}
