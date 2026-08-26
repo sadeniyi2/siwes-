@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { signAccess } from "@/lib/token";
+import { grantToAccount } from "@/lib/session";
 import { recordCodeUse, validateCode } from "@/lib/kv";
 
 export const runtime = "nodejs";
@@ -57,6 +58,20 @@ export async function POST(req: NextRequest) {
 
   // Log who redeemed it, for the founder's "used by" list (best-effort).
   void recordCodeUse(code, name, clientIp(req));
+
+  // Attach the access to the logged-in account when there is one.
+  const granted = await grantToAccount(req.headers.get("x-access-token"), {
+    tier: result.tier,
+    kind: "free",
+  });
+  if (granted) {
+    return Response.json({
+      ok: true,
+      token: granted.token,
+      tier: result.tier,
+      kind: "free",
+    });
+  }
 
   const token = signAccess({
     email,

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { verifyAccess } from "@/lib/token";
-import { kvConfigured, listTrials, listUsers } from "@/lib/kv";
+import { kvConfigured, listAccounts, listTrials, listUsers } from "@/lib/kv";
 
 export const runtime = "nodejs";
 
@@ -60,10 +60,11 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false }, { status: 401 });
   }
 
-  const [{ sales, error }, users, trials] = await Promise.all([
+  const [{ sales, error }, users, trials, accounts] = await Promise.all([
     fetchSales(),
     listUsers(),
     listTrials(),
+    listAccounts(),
   ]);
 
   // Group trials by IP to surface possible abuse (many trials, one network).
@@ -84,6 +85,9 @@ export async function POST(req: NextRequest) {
     activeTrials: trials.filter((t) => t.exp > now).length,
     expiredTrials: trials.filter((t) => t.exp > 0 && t.exp <= now).length,
     onlineNow: users.filter((u) => now - u.lastSeen < 5 * 60 * 1000).length,
+    accounts: accounts.length,
+    accountsWithData: accounts.filter((a) => !!a.data).length,
+    paidAccounts: accounts.filter((a) => a.tier === "basic" || a.tier === "pro").length,
   };
 
   return Response.json({
@@ -93,6 +97,17 @@ export async function POST(req: NextRequest) {
     sales: sales.sort((a, b) => (a.date < b.date ? 1 : -1)),
     users: users.sort((a, b) => b.lastSeen - a.lastSeen),
     trials: trials.map((t) => ({ ...t, ipCount: t.ip ? ipCounts.get(t.ip) ?? 1 : 0 })),
+    accounts: accounts.map((a) => ({
+      email: a.email,
+      name: a.name ?? "",
+      tier: a.tier ?? null,
+      kind: a.kind ?? null,
+      trialExp: a.trialExp ?? 0,
+      matric: a.matric ?? "",
+      hasData: !!a.data,
+      created: a.created,
+      lastSeen: a.lastSeen,
+    })),
     tracking: kvConfigured(),
     salesError: error ?? null,
   });

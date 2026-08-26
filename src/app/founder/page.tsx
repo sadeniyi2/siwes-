@@ -47,6 +47,27 @@ interface BlockRow {
   reason?: string;
   created: number;
 }
+interface AiKeyRow {
+  id: number;
+  masked: string;
+  label?: string;
+  enabled: boolean;
+  status: string;
+  uses: number;
+  lastUsed: number;
+  exhaustedAt: number;
+}
+interface AccountRow {
+  email: string;
+  name: string;
+  tier: string | null;
+  kind: string | null;
+  trialExp: number;
+  matric: string;
+  hasData: boolean;
+  created: number;
+  lastSeen: number;
+}
 interface Data {
   admin: string;
   stats: {
@@ -59,10 +80,14 @@ interface Data {
     activeTrials: number;
     expiredTrials: number;
     onlineNow: number;
+    accounts: number;
+    accountsWithData: number;
+    paidAccounts: number;
   };
   sales: Sale[];
   users: UserRow[];
   trials: TrialRow[];
+  accounts: AccountRow[];
   tracking: boolean;
   salesError: string | null;
 }
@@ -105,7 +130,7 @@ export default function FounderPage() {
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<Data | null>(null);
   const [tab, setTab] = useState<
-    "sales" | "users" | "trials" | "codes" | "blocks"
+    "sales" | "users" | "accounts" | "trials" | "codes" | "blocks" | "aikeys"
   >("sales");
 
   useEffect(() => {
@@ -174,6 +199,7 @@ export default function FounderPage() {
   const [newCode, setNewCode] = useState("");
   const [newNote, setNewNote] = useState("");
   const [newDevices, setNewDevices] = useState("3");
+  const [newCodeTier, setNewCodeTier] = useState<"basic" | "pro">("pro");
   const [codeMsg, setCodeMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
@@ -232,6 +258,36 @@ export default function FounderPage() {
   useEffect(() => {
     if (token && tab === "blocks" && blocks === null) blocksApi({ action: "list" });
   }, [token, tab, blocks, blocksApi]);
+
+  // ---- AI key pool ----
+  const [aiKeys, setAiKeys] = useState<AiKeyRow[] | null>(null);
+  const [newKey, setNewKey] = useState("");
+  const [newKeyLabel, setNewKeyLabel] = useState("");
+  const [aiMsg, setAiMsg] = useState<string | null>(null);
+
+  const aiKeysApi = useCallback(
+    async (payload: Record<string, unknown>) => {
+      if (!token) return;
+      setAiMsg(null);
+      try {
+        const res = await fetch("/api/founder/aikeys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-founder-token": token },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        if (j.ok) setAiKeys(j.keys);
+        else setAiMsg(j.message || "Something went wrong.");
+      } catch {
+        setAiMsg("Network error. Please try again.");
+      }
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    if (token && tab === "aikeys" && aiKeys === null) aiKeysApi({ action: "list" });
+  }, [token, tab, aiKeys, aiKeysApi]);
 
   function randomCode() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -367,6 +423,8 @@ export default function FounderPage() {
             <Stat label="Revenue" value={naira(data.stats.revenue)} tone="text-emerald-600" />
             <Stat label="Sales" value={data.stats.salesCount} />
             <Stat label="Users" value={data.stats.totalUsers} />
+            <Stat label="Accounts" value={data.stats.accounts} tone="text-accent" />
+            <Stat label="Logbooks saved" value={data.stats.accountsWithData} tone="text-emerald-600" />
             <Stat label="Online now" value={data.stats.onlineNow} tone="text-accent" />
             <Stat label="Trials taken" value={data.stats.trialsTaken} />
             <Stat label="Active trials" value={data.stats.activeTrials} tone="text-accent" />
@@ -408,7 +466,7 @@ export default function FounderPage() {
           )}
 
           <div className="mb-3 flex gap-1 rounded-full border border-ink/10 bg-paper p-1 text-sm w-fit">
-            {(["sales", "users", "trials", "codes", "blocks"] as const).map((t) => (
+            {(["sales", "users", "accounts", "trials", "codes", "blocks", "aikeys"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -420,16 +478,20 @@ export default function FounderPage() {
                   ? "Sales"
                   : t === "users"
                     ? "Users"
-                    : t === "trials"
-                      ? "Trials"
-                      : t === "codes"
-                        ? "Free codes"
-                        : "Blocked"}
+                    : t === "accounts"
+                      ? "Accounts"
+                      : t === "trials"
+                        ? "Trials"
+                        : t === "codes"
+                          ? "Free codes"
+                          : t === "blocks"
+                            ? "Blocked"
+                            : "AI keys"}
               </button>
             ))}
           </div>
 
-          {tab !== "codes" && tab !== "blocks" && (
+          {tab !== "codes" && tab !== "blocks" && tab !== "aikeys" && (
           <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-paper-sheet shadow-card">
             {tab === "sales" ? (
               <table className="w-full min-w-[560px] text-sm">
@@ -667,6 +729,78 @@ export default function FounderPage() {
                   })}
                 </tbody>
               </table>
+            ) : tab === "accounts" ? (
+              <table className="w-full min-w-[680px] text-sm">
+                <thead>
+                  <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
+                    <th className="px-4 py-3">Account</th>
+                    <th className="px-4 py-3">Plan</th>
+                    <th className="px-4 py-3">Logbook</th>
+                    <th className="px-4 py-3">Joined</th>
+                    <th className="px-4 py-3">Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.accounts.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                        No accounts yet. Students appear here once they sign up.
+                      </td>
+                    </tr>
+                  )}
+                  {data.accounts.map((a) => {
+                    const online = Date.now() - a.lastSeen < 5 * 60 * 1000;
+                    return (
+                      <tr key={a.email} className="border-b border-ink/5">
+                        <td className="px-4 py-3">
+                          <p className="flex items-center gap-1.5 font-medium">
+                            {online && (
+                              <span className="h-2 w-2 rounded-full bg-emerald-500" title="online" />
+                            )}
+                            {a.name || "—"}
+                          </p>
+                          <p className="text-xs text-ink-faint">{a.email}</p>
+                          {a.matric && (
+                            <p className="font-mono text-[11px] text-ink-faint">
+                              {a.matric}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {a.tier ? (
+                            <span>
+                              <span className="capitalize">{a.kind ?? "paid"}</span>
+                              <span className="text-ink-faint"> · {a.tier}</span>
+                              {a.kind === "trial" && (
+                                <span className="block text-xs text-ink-faint">
+                                  {trialLeft(a.trialExp)}
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-ink-faint">no plan</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {a.hasData ? (
+                            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
+                              saved
+                            </span>
+                          ) : (
+                            <span className="text-ink-faint">—</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
+                          {a.created ? timeAgo(a.created) : "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
+                          {timeAgo(a.lastSeen)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             ) : null}
           </div>
           )}
@@ -706,6 +840,15 @@ export default function FounderPage() {
                   placeholder="Note (who it's for) — optional"
                   className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
                 />
+                <select
+                  value={newCodeTier}
+                  onChange={(e) => setNewCodeTier(e.target.value as "basic" | "pro")}
+                  title="What this code unlocks"
+                  className="shrink-0 rounded-xl border border-ink/15 bg-paper-sheet px-3 py-2.5 text-sm outline-none focus:border-accent"
+                >
+                  <option value="pro">Grants Pro</option>
+                  <option value="basic">Grants Basic</option>
+                </select>
                 <label className="flex shrink-0 items-center gap-1.5 rounded-xl border border-ink/15 bg-paper-sheet px-3 py-2.5 text-sm">
                   <span className="whitespace-nowrap text-ink-faint">Devices</span>
                   <input
@@ -732,7 +875,7 @@ export default function FounderPage() {
                     codesApi({
                       action: "add",
                       code: c,
-                      tier: "pro",
+                      tier: newCodeTier,
                       note: newNote,
                       maxUses: devices,
                     });
@@ -1026,6 +1169,152 @@ export default function FounderPage() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {tab === "aikeys" && (
+            <div className="rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-card">
+              <h2 className="font-display text-base font-semibold">
+                Shared AI keys
+              </h2>
+              <p className="mb-4 mt-0.5 text-sm text-ink-soft">
+                Add your own free Gemini keys here so students don&apos;t have to.
+                The app uses a healthy key automatically and switches to the next
+                one when a key hits its daily limit (exhausted keys recover after
+                24h). Keys stay private — students never see them. Get keys free
+                at{" "}
+                <a
+                  href="https://aistudio.google.com/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent underline"
+                >
+                  aistudio.google.com/apikey
+                </a>
+                .
+              </p>
+
+              {!data.tracking && (
+                <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+                  Connect Supabase and create the{" "}
+                  <code className="rounded bg-paper-sheet px-1">siwes_ai_keys</code>{" "}
+                  table to manage keys here.
+                </p>
+              )}
+
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value)}
+                  placeholder="Paste a Gemini API key (AIza…)"
+                  className="min-w-0 flex-[2] rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <input
+                  value={newKeyLabel}
+                  onChange={(e) => setNewKeyLabel(e.target.value)}
+                  placeholder="Label (e.g. Olive's key) — optional"
+                  className="min-w-0 flex-1 rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <button
+                  onClick={() => {
+                    if (!newKey.trim()) return;
+                    aiKeysApi({ action: "add", key: newKey, label: newKeyLabel });
+                    setNewKey("");
+                    setNewKeyLabel("");
+                  }}
+                  disabled={!newKey.trim() || !data.tracking}
+                  className="btn-primary shrink-0 disabled:opacity-50"
+                  type="button"
+                >
+                  Add key
+                </button>
+              </div>
+
+              {aiMsg && (
+                <p className="mb-3 rounded-xl border border-margin/30 bg-margin/10 px-3 py-2 text-sm text-margin">
+                  {aiMsg}
+                </p>
+              )}
+
+              <div className="overflow-x-auto rounded-xl border border-ink/10">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead>
+                    <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
+                      <th className="px-4 py-3">Key</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Used</th>
+                      <th className="px-4 py-3">Last used</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiKeys === null && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                          Loading…
+                        </td>
+                      </tr>
+                    )}
+                    {aiKeys?.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-ink-faint">
+                          No shared keys yet. Add one above and students stop
+                          being asked for a key.
+                        </td>
+                      </tr>
+                    )}
+                    {aiKeys?.map((k) => {
+                      const badge = !k.enabled
+                        ? "bg-ink/10 text-ink-faint"
+                        : k.status === "exhausted"
+                          ? "bg-amber-400/15 text-amber-700"
+                          : k.status === "invalid"
+                            ? "bg-margin/15 text-margin"
+                            : "bg-emerald-100 text-emerald-700";
+                      const label = !k.enabled ? "disabled" : k.status;
+                      return (
+                        <tr key={k.id} className="border-b border-ink/5">
+                          <td className="px-4 py-3">
+                            <span className="font-mono">{k.masked}</span>
+                            {k.label && (
+                              <span className="ml-2 text-xs text-ink-faint">
+                                {k.label}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${badge}`}
+                            >
+                              {label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-ink-soft">{k.uses}×</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
+                            {k.lastUsed ? timeAgo(k.lastUsed) : "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">
+                            <button
+                              onClick={() =>
+                                aiKeysApi({ action: "toggle", id: k.id, enabled: !k.enabled })
+                              }
+                              className="text-xs font-medium text-accent-dark hover:underline"
+                            >
+                              {k.enabled ? "Disable" : "Enable"}
+                            </button>
+                            <button
+                              onClick={() => aiKeysApi({ action: "delete", id: k.id })}
+                              className="ml-2 text-xs font-medium text-margin hover:underline"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -5,6 +5,12 @@
 
 export const FINAL_REPORT_BLUEPRINT = `You are writing the student's COMPLETE Final SIWES Report following the official NACOS Report Master-Guide. Use the student's profile and every saved logbook entry in the internship memory as the source of truth — write about what THEY actually did, focused on application, not textbook theory. Never invent a company; use the profile's firm details.
 
+WRITE IT IN A HUMAN VOICE (very important — an AI-sounding report gets flagged):
+- Write the work chapters (Chapters 4 and 5) in the FIRST PERSON, using the student's own saved entries and raw notes — their real tasks, tools and phrasing. It should sound like the same person who was chatting with you.
+- Vary sentence length, keep the language plain, and follow the "sound like the real student" writing rules (no delve/leverage/utilize/robust/comprehensive/seamless/pivotal/"in conclusion"/"it is worth noting", etc.).
+- Don't pad with textbook definitions; every point should tie to what the student actually did.
+- Insert a FEW short bracketed prompts (3–6 across the whole report) where a personal touch would help, e.g. "[Add one specific thing your supervisor taught you here]" or "[Name the exact project you worked on]" — so the student adds their own real detail. Use them sparingly, only where it genuinely helps.
+
 Produce the whole report in this exact order, using Markdown headings (# for chapter titles, ## for sub-sections):
 
 PRELIMINARY PAGES (before Chapter 1):
@@ -52,3 +58,11 @@ Produce exactly these 9 slides, each as a Markdown "## Slide N: <title>":
 9. Q & A — "Any Questions?" plus a short speaker tip: pause, breathe, answer from what you actually did; if unsure say your focus was on your specific area.
 
 Keep every on-screen bullet tight (≤6 words). Put the detail in the Speaker notes.`;
+
+export const HUMANIZE_BLUEPRINT = `Rewrite your most recent report or summary so it clearly reads like the student wrote it themselves by hand — keep ALL the same facts, structure and headings, but make the voice human:
+- Put the work sections in the first person ("I did…", "I learned…", "At first I struggled with…").
+- Vary the sentence lengths and break up any perfectly balanced or repetitive sentences.
+- Replace every AI-sounding word with plain student English (delve, leverage, utilize, robust, comprehensive, seamless, pivotal, crucial, testament, realm, underscore, foster, "in conclusion", "it is worth noting", "plays a vital role", etc.).
+- Cut textbook padding; keep only what the student actually did, in their own words from the saved entries and raw notes.
+- Add 2–4 short bracketed prompts like "[add a specific example here]" where a personal detail would make it stronger.
+Do NOT invent new facts — only rephrase what is already there. Output the full rewritten version.`;

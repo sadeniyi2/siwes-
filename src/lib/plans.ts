@@ -62,6 +62,7 @@ export const PRO_TRIGGERS = [
   "build final report",
   "build defense slides",
   "defense slide",
+  "make it more human",
   "generate table of contents",
   "summarize skills gained",
   "suggest a diagram",

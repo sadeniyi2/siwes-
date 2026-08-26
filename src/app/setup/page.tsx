@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadApiKey, loadProfile, saveApiKey, saveProfile } from "@/lib/store";
-import { loadTier, saveAccess } from "@/lib/access";
+import { loadProfile, saveProfile } from "@/lib/store";
+import { loadAccessToken, loadTier, saveAccess } from "@/lib/access";
 import { Profile, dayNameFromISO, formatLongDate } from "@/lib/types";
 import BackupCard from "@/components/BackupCard";
+import { pushCloudBackup } from "@/lib/cloud";
 
 const EMPTY: Profile = {
   fullName: "",
@@ -47,20 +48,23 @@ const inputCls =
 export default function SetupPage() {
   const router = useRouter();
   const [p, setP] = useState<Profile>(EMPTY);
-  const [apiKey, setApiKey] = useState("");
   const [code, setCode] = useState("");
   const [isEdit, setIsEdit] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Must be signed in to set up a profile.
+    if (!loadAccessToken()) {
+      router.replace("/login");
+      return;
+    }
     const existing = loadProfile();
     if (existing) {
       setP({ ...EMPTY, ...existing });
       setIsEdit(true);
     }
-    setApiKey(loadApiKey());
-  }, []);
+  }, [router]);
 
   function set<K extends keyof Profile>(key: K, value: Profile[K]) {
     setP((prev) => ({ ...prev, [key]: value }));
@@ -83,7 +87,7 @@ export default function SetupPage() {
       firmName: p.firmName.trim(),
       durationWeeks: p.durationWeeks ? Number(p.durationWeeks) : undefined,
     });
-    if (apiKey.trim()) saveApiKey(apiKey);
+    pushCloudBackup();
 
     // An access code grants (or upgrades to) free access immediately — this is
     // also how a returning user redeems a code by updating their profile.
@@ -92,7 +96,10 @@ export default function SetupPage() {
       try {
         const res = await fetch("/api/access/referral", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-access-token": loadAccessToken(),
+          },
           body: JSON.stringify({ code, name: fullName }),
         });
         const j = await res.json().catch(() => ({}));
@@ -289,44 +296,6 @@ export default function SetupPage() {
           />
           I also work on Saturdays
         </label>
-
-        <h2 className="mb-1 font-display text-sm font-bold uppercase tracking-widest text-accent-deep">
-          Your AI key
-        </h2>
-        <p className="mb-3 text-xs leading-relaxed text-ink-soft">
-          This app runs on your own free Google Gemini key, so your usage is
-          yours alone and stays private to this browser. Get one free (no card)
-          at{" "}
-          <a
-            href="https://aistudio.google.com/apikey"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-accent underline underline-offset-2"
-          >
-            aistudio.google.com/apikey
-          </a>
-          . You can also add it later.{" "}
-          <a
-            href="/SIWES-Logbook-Assistant-Guide.pdf"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-accent underline underline-offset-2"
-          >
-            Download the step-by-step guide (PDF)
-          </a>
-          .
-        </p>
-        <div className="mb-6">
-          <Field label="Gemini API key">
-            <input
-              type="password"
-              className={inputCls}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="AIza…"
-            />
-          </Field>
-        </div>
 
         <div className="mb-6">
           <Field label="Access code (optional)">

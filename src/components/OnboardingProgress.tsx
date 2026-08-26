@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadApiKey, loadEntries, loadProfile } from "@/lib/store";
+import { loadEntries, loadProfile } from "@/lib/store";
 import { loadTier } from "@/lib/access";
 
 const DISMISS_KEY = "siwes.onboard.dismissed.v1";
@@ -52,12 +52,6 @@ export default function OnboardingProgress() {
       label: "Unlock or trial",
       done: !!loadTier(),
       onClick: () => router.push("/unlock"),
-    },
-    {
-      key: "key",
-      label: "Add AI key",
-      done: !!loadApiKey(),
-      onClick: () => window.dispatchEvent(new Event("siwes-open-key")),
     },
     {
       key: "entry",

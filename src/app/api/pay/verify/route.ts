@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { signAccess, Tier } from "@/lib/token";
+import { grantToAccount } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -98,19 +99,28 @@ export async function POST(req: NextRequest) {
   }
 
   const email = data.customer?.email ?? "";
-  const token = signAccess({
-    email,
+
+  // If a logged-in account paid, upgrade that account so the plan (and their
+  // logbook) follow them to any device — and hand back an account token.
+  const granted = await grantToAccount(req.headers.get("x-access-token"), {
     tier,
     kind: "paid",
-    ref: txRef,
-    iat: Date.now(),
   });
+  const token =
+    granted?.token ??
+    signAccess({
+      email,
+      tier,
+      kind: "paid",
+      ref: txRef,
+      iat: Date.now(),
+    });
 
   return Response.json({
     ok: true,
     token,
     tier,
-    email,
+    email: granted?.email || email,
     amount,
     txRef,
     transactionId: txId,

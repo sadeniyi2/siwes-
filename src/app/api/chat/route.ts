@@ -3,6 +3,12 @@ import { NextRequest } from "next/server";
 import { buildSystemPrompt } from "@/lib/prompt";
 import { verifyAccess } from "@/lib/token";
 import { isProAction } from "@/lib/plans";
+import {
+  bumpAiKeyUse,
+  checkAndBumpUsage,
+  markAiKeyStatus,
+  pickAiKey,
+} from "@/lib/kv";
 import type { ChatRequestBody } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -79,22 +85,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Prefer the visitor's own key (sent as a header). Fall back to a server key
-  // only if the owner chose to set one — leave GEMINI_API_KEY unset on Vercel
-  // to keep every visitor on their own key.
+  // The visitor's own key (if they added one) is preferred so it never spends
+  // the owner's quota. Otherwise we fall back to the owner's managed key pool.
   const userKey = req.headers.get("x-gemini-key")?.trim();
-  const apiKey = userKey || process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    return Response.json(
-      {
-        reason: "no_key",
-        message:
-          "Add your own free Gemini API key to start. Get one at https://aistudio.google.com/apikey",
-      },
-      { status: 401 },
-    );
-  }
+  const clientId = req.headers.get("x-client-id")?.trim() || claims.ref || "anon";
 
   let body: ChatRequestBody;
   try {
@@ -136,7 +130,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const ai = new GoogleGenAI({ apiKey });
   const todayISO = new Date().toISOString().slice(0, 10);
 
   // Per-request context (saved-entry memory) rides on the first user turn.
@@ -162,24 +155,101 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // A per-student daily cap applies ONLY when using the owner's pooled key, so a
+  // few heavy users can't burn the owner's quota. Students on their own key are
+  // unlimited. Fails open if the store is unavailable.
+  if (!userKey) {
+    const limit = Number(process.env.POOL_DAILY_LIMIT || "40");
+    const usage = await checkAndBumpUsage(clientId, limit);
+    if (!usage.ok) {
+      return Response.json(
+        {
+          reason: "rate_limited",
+          message: `You've reached today's limit of ${limit} messages. Please continue tomorrow — or add your own free Gemini key in the key menu for unlimited use.`,
+        },
+        { status: 429 },
+      );
+    }
+  }
+
+  const genConfig = {
+    systemInstruction: buildSystemPrompt(todayISO),
+    maxOutputTokens: 32768,
+    temperature: 0.6,
+  };
+
   // Open the stream up front so we can surface auth/quota errors as HTTP status
-  // codes (which the client turns into a "paste a new key" prompt) rather than
-  // burying them inside the streamed body.
-  let stream: Awaited<ReturnType<typeof ai.models.generateContentStream>>;
-  try {
-    stream = await ai.models.generateContentStream({
-      model: MODEL,
-      contents,
-      config: {
-        systemInstruction: buildSystemPrompt(todayISO),
-        maxOutputTokens: 32768,
-        temperature: 0.6,
+  // codes. When using the owner's pool, a quota/invalid key auto-rotates to the
+  // next key so students never see the failure.
+  let stream:
+    | Awaited<ReturnType<GoogleGenAI["models"]["generateContentStream"]>>
+    | null = null;
+  const tried: number[] = [];
+  let envTried = false;
+  let lastErr: { status: number; reason: string; message: string } | null = null;
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    let key: string | undefined;
+    let poolId: number | null = null;
+    let poolUses = 0;
+
+    if (userKey) {
+      if (attempt > 0) break; // no rotation for the student's own key
+      key = userKey;
+    } else {
+      const cand = await pickAiKey(tried);
+      if (cand) {
+        key = cand.key;
+        poolId = cand.id;
+        poolUses = cand.uses;
+        tried.push(cand.id);
+      } else if (!envTried && process.env.GEMINI_API_KEY) {
+        key = process.env.GEMINI_API_KEY;
+        envTried = true;
+      }
+    }
+    if (!key) break;
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: key });
+      stream = await ai.models.generateContentStream({
+        model: MODEL,
+        contents,
+        config: genConfig,
+      });
+      if (poolId != null) void bumpAiKeyUse(poolId, poolUses);
+      break;
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      const c = classify(raw);
+      lastErr = c;
+      if (poolId != null) {
+        // Mark this pool key and rotate to the next one.
+        if (c.reason === "quota") void markAiKeyStatus(poolId, "exhausted");
+        else if (c.reason === "invalid_key") void markAiKeyStatus(poolId, "invalid");
+        continue;
+      }
+      // The student's own key (or the env key) failed — report it.
+      return Response.json({ reason: c.reason, message: c.message }, { status: c.status });
+    }
+  }
+
+  if (!stream) {
+    if (lastErr) {
+      const message =
+        lastErr.reason === "quota"
+          ? "The AI is very busy right now (all keys are at their limit). Please try again in a little while."
+          : lastErr.message;
+      return Response.json({ reason: lastErr.reason, message }, { status: lastErr.status });
+    }
+    return Response.json(
+      {
+        reason: "no_key",
+        message:
+          "The AI isn't set up yet. Please try again later, or add your own free Gemini key in the key menu.",
       },
-    });
-  } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
-    const { status, reason, message } = classify(raw);
-    return Response.json({ reason, message }, { status });
+      { status: 503 },
+    );
   }
 
   const encoder = new TextEncoder();

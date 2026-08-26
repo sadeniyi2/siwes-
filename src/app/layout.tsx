@@ -67,7 +67,10 @@ export default function RootLayout({
           <Link href="/privacy" className="hover:text-accent hover:underline">
             Privacy Policy
           </Link>
-          <p className="mt-1">Your logbook data stays in your browser.</p>
+          <p className="mt-1">
+            Your logbook is saved to your account, so it&apos;s safe even if you
+            clear your browser or switch devices.
+          </p>
         </footer>
       </body>
     </html>

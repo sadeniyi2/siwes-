@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadProfile } from "@/lib/store";
-import { PLANS, TRIAL_DAYS, Tier, clientId, loadTier, saveAccess, saveTrial, trialUsed } from "@/lib/access";
+import { loadProfile, saveProfile } from "@/lib/store";
+import { PLANS, TRIAL_DAYS, Tier, clientId, loadAccessToken, loadTier, saveAccess, saveTrial, trialUsed } from "@/lib/access";
 import { downloadReceipt, ReceiptData } from "@/lib/receipt";
 import Tour, { TourStep } from "@/components/Tour";
 
@@ -94,6 +94,14 @@ export default function UnlockPage() {
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [matric, setMatric] = useState("");
   const [claiming, setClaiming] = useState(false);
+
+  // Must be signed in to reach the plans page — unless arriving via a founder
+  // activation link (?access=…), which carries its own token.
+  useEffect(() => {
+    if (loadAccessToken()) return;
+    if (new URLSearchParams(window.location.search).get("access")) return;
+    router.replace("/login");
+  }, [router]);
 
   // Preload the payment script as soon as the page opens.
   useEffect(() => {
@@ -189,7 +197,10 @@ export default function UnlockPage() {
   async function verify(transactionId: string | number) {
     const res = await fetch("/api/pay/verify", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": loadAccessToken(),
+      },
       body: JSON.stringify({ transactionId }),
     });
     const j = await res.json();
@@ -221,7 +232,10 @@ export default function UnlockPage() {
     try {
       const res = await fetch("/api/access/referral", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-access-token": loadAccessToken(),
+        },
         body: JSON.stringify({ code, name, email }),
       });
       const j = await res.json();
@@ -251,12 +265,20 @@ export default function UnlockPage() {
     try {
       const res = await fetch("/api/access/trial", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-access-token": loadAccessToken(),
+        },
         body: JSON.stringify({ matric, name, device: clientId() }),
       });
       const j = await res.json();
       if (res.ok && j.ok) {
         saveTrial(j.token, j.exp);
+        // Keep the matric on the profile so their logbook backs up under it.
+        const prof = loadProfile();
+        if (prof && !prof.matricNumber?.trim()) {
+          saveProfile({ ...prof, matricNumber: matric.trim() });
+        }
         router.replace("/");
         return;
       }
@@ -618,7 +640,8 @@ export default function UnlockPage() {
 
       <p className="mt-5 text-center text-xs text-ink-faint">
         Secure payment by Flutterwave · card, bank transfer & USSD · your receipt
-        is emailed to you. Access is tied to this browser.
+        is emailed to you. Your access is tied to your account, so it works on any
+        device you log in from.
       </p>
       <p className="mt-1 text-center text-xs text-ink-faint">
         By starting a trial or paying you agree to our{" "}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Tier } from "./plans";
+import { clearLocalData } from "./backup";
 
 export type { Tier } from "./plans";
 export { PLANS, PRO_TRIGGERS, isProAction, type PlanInfo } from "./plans";
@@ -47,6 +48,32 @@ export function saveAccess(token: string, tier: Tier, kind: Kind = "paid") {
   window.dispatchEvent(new Event("siwes-access-change"));
 }
 
+/** Save a login session token. `tier`/`kind` may be null when the account has
+ *  no plan yet — the app then sends them to /unlock to choose one. */
+export function saveLogin(token: string, tier: Tier | null, kind: Kind | null) {
+  localStorage.setItem(TOKEN_KEY, token);
+  if (tier) localStorage.setItem(TIER_KEY, tier);
+  else localStorage.removeItem(TIER_KEY);
+  if (kind) localStorage.setItem(KIND_KEY, kind);
+  else localStorage.removeItem(KIND_KEY);
+  window.dispatchEvent(new Event("siwes-access-change"));
+}
+
+/** The email of the signed-in account, read from the stored token (best-effort,
+ *  unverified — display only). */
+export function loadEmail(): string {
+  const token = loadAccessToken();
+  if (!token) return "";
+  try {
+    const payload = token.split(".")[0];
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const claims = JSON.parse(json) as { email?: string };
+    return claims?.email ?? "";
+  } catch {
+    return "";
+  }
+}
+
 /** Start a trial: store the trial token and its expiry time. */
 export function saveTrial(token: string, exp: number) {
   localStorage.setItem(TRIAL_EXP_KEY, String(exp));
@@ -84,6 +111,13 @@ export function clearAccess() {
   localStorage.removeItem(KIND_KEY);
   localStorage.removeItem(TRIAL_EXP_KEY);
   window.dispatchEvent(new Event("siwes-access-change"));
+}
+
+/** Sign out: drop the session token AND the cached logbook data, so the next
+ *  person on this browser starts clean (their data is safe in their account). */
+export function logout() {
+  clearAccess();
+  clearLocalData();
 }
 
 const CLIENT_ID_KEY = "siwes.clientid.v1";

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AssistantMessage, { ParsedEntry } from "@/components/AssistantMessage";
 import AccessGate from "@/components/AccessGate";
-import KeyModal from "@/components/KeyModal";
 import Toast from "@/components/Toast";
 import Tour, { TourStep } from "@/components/Tour";
 import OnboardingProgress from "@/components/OnboardingProgress";
@@ -16,8 +15,10 @@ import WritingPrefs, {
   loadPrefs,
   prefsDirective,
 } from "@/components/WritingPrefs";
+import { pullCloudBackup, pushCloudBackup } from "@/lib/cloud";
 import {
   Tier,
+  clientId,
   isTrial,
   loadAccessToken,
   trialExpired,
@@ -26,7 +27,6 @@ import {
 import {
   buildMemory,
   clearChat,
-  loadApiKey,
   loadChat,
   loadEntries,
   loadProfile,
@@ -34,7 +34,11 @@ import {
   saveEntry,
 } from "@/lib/store";
 import { ChatMessage, formatLongDate, weekNumberOf } from "@/lib/types";
-import { DEFENSE_SLIDES_BLUEPRINT, FINAL_REPORT_BLUEPRINT } from "@/lib/templates";
+import {
+  DEFENSE_SLIDES_BLUEPRINT,
+  FINAL_REPORT_BLUEPRINT,
+  HUMANIZE_BLUEPRINT,
+} from "@/lib/templates";
 
 interface QuickAction {
   label: string;
@@ -49,6 +53,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { label: "Generate Monthly Summary", icon: "🗂", pro: true },
   { label: "Build Final Report", icon: "📄", pro: true, augment: FINAL_REPORT_BLUEPRINT },
   { label: "Build Defense Slides", icon: "🎤", pro: true, augment: DEFENSE_SLIDES_BLUEPRINT },
+  { label: "Make it more human", icon: "🧑", pro: true, augment: HUMANIZE_BLUEPRINT },
   { label: "Improve my last entry", icon: "✨", pro: true },
   { label: "Generate Table of Contents", icon: "🔖", pro: true },
   { label: "Summarize skills gained", icon: "🏷", pro: true },
@@ -85,11 +90,6 @@ const ASSISTANT_TOUR: TourStep[] = [
     body: "When you're ready, generate your weekly summary, monthly summary, or the full final SIWES report from here.",
   },
   {
-    selector: '[data-tour="key"]',
-    title: "Your free AI key",
-    body: "The app runs on your own free Google Gemini key. Tap here anytime to add or change it.",
-  },
-  {
     selector: '[data-tour="nav-logbook"]',
     title: "Your logbook",
     body: "Open the Logbook tab to see your Weekly Progress Chart, edit entries, and print or download them.",
@@ -119,11 +119,7 @@ function Assistant({ tier }: { tier: Tier }) {
   const [lastUserText, setLastUserText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
-  const [hasKey, setHasKey] = useState(true);
-  const [keyModal, setKeyModal] = useState<
-    null | "setup" | "invalid_key" | "quota"
-  >(null);
-  const [pendingRetry, setPendingRetry] = useState<string | null>(null);
+  const [aiReady, setAiReady] = useState(true);
   const [onTrial, setOnTrial] = useState(false);
   const [countdown, setCountdown] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -131,6 +127,11 @@ function Assistant({ tier }: { tier: Tier }) {
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Refs let the message callbacks stay referentially stable, so the (memoized)
+  // chat messages don't re-render on every keystroke in the composer.
+  const lastUserTextRef = useRef("");
+  lastUserTextRef.current = lastUserText;
+  const sendRef = useRef<(t: string, a?: string) => void>(() => {});
 
   useEffect(() => {
     const profile = loadProfile();
@@ -142,21 +143,39 @@ function Assistant({ tier }: { tier: Tier }) {
     setMessages(loadChat());
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
     setPrefs(loadPrefs());
-    const sync = () => {
-      setHasKey(!!loadApiKey());
-      setOnTrial(isTrial());
-    };
+
+    // New phone / cleared history? Pull the logbook back from the account.
+    if (loadEntries().length === 0) {
+      pullCloudBackup().then((n) => {
+        if (n > 0) {
+          setSavedDates(new Set(loadEntries().map((e) => e.date)));
+          setMessages(loadChat());
+          window.dispatchEvent(new Event("siwes-entry-saved"));
+          setToast(
+            `Welcome back — restored ${n} logbook ${n === 1 ? "entry" : "entries"} from your account.`,
+          );
+        } else {
+          pushCloudBackup();
+        }
+      });
+    } else {
+      // Keep the database copy fresh with whatever is here (auto, silent).
+      pushCloudBackup();
+    }
+    const sync = () => setOnTrial(isTrial());
     sync();
-    const openKey = () => setKeyModal("setup");
+    // The owner provides the AI key(s) centrally; students never handle keys.
+    // We only check whether the assistant is ready so we can show a gentle note
+    // if the owner hasn't added a key yet.
+    fetch("/api/ai/status")
+      .then((r) => r.json())
+      .then((j) => setAiReady(!!j.serverKey))
+      .catch(() => setAiReady(true));
     const focusComposer = () => textareaRef.current?.focus();
-    window.addEventListener("siwes-key-change", sync);
     window.addEventListener("siwes-access-change", sync);
-    window.addEventListener("siwes-open-key", openKey);
     window.addEventListener("siwes-focus-composer", focusComposer);
     return () => {
-      window.removeEventListener("siwes-key-change", sync);
       window.removeEventListener("siwes-access-change", sync);
-      window.removeEventListener("siwes-open-key", openKey);
       window.removeEventListener("siwes-focus-composer", focusComposer);
     };
   }, [router]);
@@ -198,14 +217,6 @@ function Assistant({ tier }: { tier: Tier }) {
       return;
     }
 
-    // No key yet? Remember what they wanted to send and ask for a key first.
-    const key = loadApiKey();
-    if (!key) {
-      setPendingRetry(trimmed);
-      setKeyModal("setup");
-      return;
-    }
-
     setInput("");
     requestAnimationFrame(autoGrow);
     setLastUserText(trimmed);
@@ -233,8 +244,8 @@ function Assistant({ tier }: { tier: Tier }) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-gemini-key": key,
           "x-access-token": loadAccessToken(),
+          "x-client-id": clientId(),
         },
         signal: controller.signal,
         body: JSON.stringify({
@@ -263,20 +274,19 @@ function Assistant({ tier }: { tier: Tier }) {
         return;
       }
 
-      // Auth / quota problems come back as JSON with a machine-readable reason.
+      // Key / quota / rate-limit problems come back as JSON. Students don't
+      // manage keys, so these are always shown as a friendly message.
       if (res.status === 401 || res.status === 429) {
-        let reason: "invalid_key" | "quota" = "invalid_key";
+        let message = "";
         try {
           const j = await res.json();
-          reason = j.reason === "quota" ? "quota" : "invalid_key";
+          message = j.message || "";
         } catch {
           /* ignore */
         }
-        // Drop the empty assistant bubble, restore the input, open the modal.
         setMessages((prev) => prev.slice(0, -2));
         setInput(trimmed);
-        setPendingRetry(trimmed);
-        setKeyModal(reason);
+        setToast(message || "The AI is busy right now. Please try again shortly.");
         return;
       }
 
@@ -330,23 +340,30 @@ function Assistant({ tier }: { tier: Tier }) {
       abortRef.current = null;
     }
   }
+  sendRef.current = send;
 
-  function handleSaveEntry(entry: ParsedEntry) {
+  // Stable callbacks (via refs) so memoized messages don't re-render while typing.
+  const handleSaveEntry = useCallback((entry: ParsedEntry) => {
     saveEntry({
       date: entry.date,
       day: entry.day,
       description: entry.text,
-      rawNotes: lastUserText || undefined,
+      rawNotes: lastUserTextRef.current || undefined,
       savedAt: new Date().toISOString(),
     });
     setSavedDates(new Set(loadEntries().map((e) => e.date)));
     window.dispatchEvent(new Event("siwes-entry-saved"));
+    pushCloudBackup();
     const profile = loadProfile();
     const week = profile ? weekNumberOf(entry.date, profile.startDate) : 1;
     setToast(
       `Saved to logbook — Week ${week}, ${entry.day} ${formatLongDate(entry.date)}`,
     );
-  }
+  }, []);
+
+  const handleSuggestion = useCallback((label: string) => {
+    sendRef.current(label);
+  }, []);
 
   function handleClear() {
     if (confirm("Clear this conversation? Saved logbook entries are kept.")) {
@@ -362,21 +379,15 @@ function Assistant({ tier }: { tier: Tier }) {
     >
       <Toast message={toast} onDone={() => setToast(null)} />
       <Tour steps={ASSISTANT_TOUR} storageKey="siwes.tour.assistant.v2" />
-      <KeyModal
-        open={keyModal !== null}
-        reason={keyModal ?? "setup"}
-        onClose={() => {
-          setKeyModal(null);
-          setHasKey(!!loadApiKey());
-          // If a key is now present and a message was waiting, send it.
-          if (loadApiKey() && pendingRetry) {
-            const t = pendingRetry;
-            setPendingRetry(null);
-            setInput("");
-            setTimeout(() => send(t), 0);
-          }
-        }}
-      />
+
+      {!aiReady && (
+        <div className="animate-rise mb-3 flex items-center gap-2.5 rounded-xl border border-amber-300/70 bg-amber-400/10 px-4 py-2.5 text-sm text-ink-soft">
+          <span aria-hidden className="text-lg">
+            ⚙️
+          </span>
+          <p>The assistant is being set up. Please check back shortly.</p>
+        </div>
+      )}
 
       <OnboardingProgress />
       {tier === "pro" && <ProInsights />}
@@ -404,18 +415,6 @@ function Assistant({ tier }: { tier: Tier }) {
           )}
         </div>
         {tier === "pro" && <WritingPrefs value={prefs} onChange={setPrefs} />}
-        <button
-          data-tour="key"
-          onClick={() => setKeyModal("setup")}
-          title={hasKey ? "Your Gemini key is connected" : "Add your Gemini key"}
-          className={`chip shrink-0 ${
-            hasKey
-              ? "border-emerald-300 text-emerald-700"
-              : "border-margin/40 text-margin"
-          }`}
-        >
-          🔑 {hasKey ? "Key" : "Add key"}
-        </button>
         {messages.length > 0 && (
           <button
             onClick={handleClear}
@@ -519,7 +518,7 @@ function Assistant({ tier }: { tier: Tier }) {
                       streaming={busy && isLast}
                       savedDates={savedDates}
                       onSaveEntry={handleSaveEntry}
-                      onSuggestion={(label) => send(label)}
+                      onSuggestion={handleSuggestion}
                     />
                   </div>
                 )}

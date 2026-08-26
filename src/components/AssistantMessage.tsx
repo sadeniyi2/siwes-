@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Mermaid from "./Mermaid";
 import { wordCount } from "@/lib/types";
 import { exportMarkdownDocx, looksLikeDocument } from "@/lib/reportDocx";
+import { exportSlidesPptx, looksLikeSlides } from "@/lib/slidesPptx";
 
 function inferFileBase(content: string): string {
   if (/(^|\n)\s*#{1,3}\s*slide\s*\d|defense slide/i.test(content))
@@ -86,7 +87,7 @@ function Markdown({ text }: { text: string }) {
   );
 }
 
-export default function AssistantMessage({
+function AssistantMessage({
   content,
   streaming,
   savedDates,
@@ -101,6 +102,8 @@ export default function AssistantMessage({
 }) {
   const segments = parseAssistantContent(content);
   const [saving, setSaving] = useState(false);
+  const [savingPptx, setSavingPptx] = useState(false);
+  const isSlides = !streaming && looksLikeSlides(content);
   const showDownload = !streaming && looksLikeDocument(content);
 
   async function downloadWord() {
@@ -111,6 +114,17 @@ export default function AssistantMessage({
       /* ignore */
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function downloadPptx() {
+    setSavingPptx(true);
+    try {
+      await exportSlidesPptx(content);
+    } catch {
+      /* ignore */
+    } finally {
+      setSavingPptx(false);
     }
   }
 
@@ -207,13 +221,27 @@ export default function AssistantMessage({
           </div>
         );
       })}
-      {showDownload && (
+      {(showDownload || isSlides) && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink/10 pt-3">
+          {isSlides && (
+            <button
+              onClick={downloadPptx}
+              disabled={savingPptx}
+              title="Download a designed PowerPoint deck with speaker notes"
+              className="btn bg-accent px-3.5 py-1.5 text-xs text-white hover:bg-accent-dark hover:shadow-lift disabled:opacity-60"
+            >
+              {savingPptx ? "Designing…" : "⬇ Download as PowerPoint"}
+            </button>
+          )}
           <button
             onClick={downloadWord}
             disabled={saving}
             title="Download this as an editable Word document"
-            className="btn bg-accent px-3.5 py-1.5 text-xs text-white hover:bg-accent-dark hover:shadow-lift disabled:opacity-60"
+            className={`btn px-3.5 py-1.5 text-xs disabled:opacity-60 ${
+              isSlides
+                ? "border border-ink/15 bg-paper-sheet text-ink-soft hover:border-accent/50 hover:text-accent-dark"
+                : "bg-accent text-white hover:bg-accent-dark hover:shadow-lift"
+            }`}
           >
             {saving ? "Preparing…" : "⬇ Download as Word"}
           </button>
@@ -225,6 +253,31 @@ export default function AssistantMessage({
           </button>
         </div>
       )}
+      {(showDownload || isSlides) && (
+        <div className="mt-2 rounded-xl border border-accent/20 bg-accent-wash px-3.5 py-3 text-xs leading-relaxed text-ink-soft">
+          <p className="mb-1 font-semibold text-accent-deep">
+            ✅ Before you submit
+          </p>
+          {isSlides ? (
+            <ul className="list-disc space-y-0.5 pl-4">
+              <li>Add your real screenshots / logos where each slide says [Visual: …].</li>
+              <li>Read the speaker notes — practise saying them, don&apos;t read the screen.</li>
+              <li>Check your name, matric and company on the title slide.</li>
+              <li>Keep each slide to a few short lines (6×6 rule).</li>
+            </ul>
+          ) : (
+            <ul className="list-disc space-y-0.5 pl-4">
+              <li>Fill in every [bracketed] prompt with your own detail.</li>
+              <li>Tap <span className="font-medium">Make it more human</span>, then read it once aloud.</li>
+              <li>Add your screenshots / figures where noted, and label them.</li>
+              <li>Check your name, matric, company and the training dates.</li>
+              <li>Download as Word and format it per the NACOS guide before printing.</li>
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+export default memo(AssistantMessage);
