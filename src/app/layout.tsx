@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Fraunces, Instrument_Sans } from "next/font/google";
 import HeaderMeta from "@/components/HeaderMeta";
 import Nav from "@/components/Nav";
+import LogoutButton from "@/components/LogoutButton";
 import TutorialTab from "@/components/TutorialTab";
 import "./globals.css";
 
@@ -52,7 +53,10 @@ export default function RootLayout({
                 <HeaderMeta />
               </div>
             </Link>
-            <Nav />
+            <div className="flex items-center gap-2">
+              <LogoutButton />
+              <Nav />
+            </div>
           </div>
         </header>
         <main className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
