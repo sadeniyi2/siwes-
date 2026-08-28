@@ -44,6 +44,45 @@ export function signAccess(claims: AccessClaims): string {
   return `${payload}.${sig}`;
 }
 
+/**
+ * Password-reset token. Domain-separated from access tokens (the HMAC is taken
+ * over "reset." + payload) so a reset link can never be replayed as a login
+ * session, and vice-versa. Carries only the matric it authorises and an expiry.
+ */
+export function signReset(matric: string, exp: number): string {
+  const payload = Buffer.from(JSON.stringify({ matric, exp })).toString("base64url");
+  const sig = crypto
+    .createHmac("sha256", SECRET)
+    .update("reset." + payload)
+    .digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+export function verifyReset(token: string | null | undefined): { matric: string } | null {
+  if (!SECRET || !token) return null;
+  const [payload, sig] = token.split(".");
+  if (!payload || !sig) return null;
+  const expected = crypto
+    .createHmac("sha256", SECRET)
+    .update("reset." + payload)
+    .digest("base64url");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString()) as {
+      matric?: string;
+      exp?: number;
+    };
+    if (!data.matric || typeof data.exp !== "number" || Date.now() > data.exp) {
+      return null;
+    }
+    return { matric: data.matric };
+  } catch {
+    return null;
+  }
+}
+
 export function verifyAccess(token: string | null | undefined): AccessClaims | null {
   if (!SECRET || !token) return null;
   const [payload, sig] = token.split(".");

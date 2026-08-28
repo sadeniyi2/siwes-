@@ -9,6 +9,7 @@ const inputCls =
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [matric, setMatric] = useState("");
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
 
@@ -19,12 +20,12 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/auth/forgot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matric: matric.trim() }),
+        body: JSON.stringify({ matric: matric.trim(), email: email.trim() }),
       });
       const j = await res.json().catch(() => ({}));
       setSent(
         j.message ||
-          "If that email has an account, we've notified the owner. You'll be sent a temporary password to sign in with.",
+          "If that matric number has an account, we've sent a reset link to the email on file.",
       );
     } catch {
       setSent(
@@ -45,8 +46,8 @@ export default function ForgotPasswordPage() {
           Forgot your password?
         </h1>
         <p className="mx-auto max-w-sm text-sm leading-relaxed text-ink-soft">
-          Enter your matric / registration number. We&apos;ll arrange a temporary
-          password for you to sign in with — then you can set a new one.
+          Enter your matric number and we&apos;ll email you a link to set a new
+          password. No email on your account? Your coordinator can reset it for you.
         </p>
       </div>
 
@@ -65,7 +66,7 @@ export default function ForgotPasswordPage() {
           onSubmit={submit}
           className="rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-card"
         >
-          <label className="mb-1 block">
+          <label className="mb-3 block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
               Matric / Reg number
             </span>
@@ -74,6 +75,22 @@ export default function ForgotPasswordPage() {
               onChange={(e) => setMatric(e.target.value)}
               placeholder="e.g. 20/52HA093"
               autoComplete="username"
+              className={inputCls}
+            />
+          </label>
+          <label className="mb-1 block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
+              Email{" "}
+              <span className="font-normal normal-case tracking-normal text-ink-faint">
+                (only if none is saved on your account yet)
+              </span>
+            </span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
               className={inputCls}
             />
           </label>
