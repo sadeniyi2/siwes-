@@ -6,6 +6,8 @@ import {
   deleteUser,
   getAccount,
   kvConfigured,
+  listAccounts,
+  listBackups,
   loadBackup,
   normalizeMatric,
   updateAccount,
@@ -68,6 +70,51 @@ export async function POST(req: NextRequest) {
       { ok: false, message: "Connect Supabase to manage records." },
       { status: 400 },
     );
+  }
+
+  // List the matric-keyed backups that exist, flagged with whether each one
+  // already has a login — so the founder can see exactly who is recoverable.
+  if (body.action === "list-backups") {
+    const [backups, accounts] = await Promise.all([listBackups(), listAccounts()]);
+    const have = new Set(accounts.map((a) => normalizeMatric(a.matric)));
+    return Response.json({
+      ok: true,
+      backups: backups.map((b) => ({
+        ...b,
+        hasAccount: have.has(normalizeMatric(b.matric)),
+      })),
+    });
+  }
+
+  // One click: create a login for every backup that doesn't yet have an
+  // account, restoring each student's logbook. Returns each new matric + its
+  // temporary password so the founder can hand them out.
+  if (body.action === "bulk-provision") {
+    const [backups, accounts] = await Promise.all([listBackups(), listAccounts()]);
+    const have = new Set(accounts.map((a) => normalizeMatric(a.matric)));
+    const created: {
+      matric: string;
+      name: string;
+      tempPassword: string;
+      entries: number;
+    }[] = [];
+    for (const b of backups) {
+      const m = normalizeMatric(b.matric);
+      if (have.has(m)) continue;
+      const backup = await loadBackup(m);
+      const pw = tempPassword();
+      const { hash, salt } = hashPassword(pw);
+      const ok = await createAccount(m, b.name ?? "", hash, salt, {
+        data: backup?.data,
+        mustReset: true,
+      });
+      if (ok) {
+        created.push({ matric: m, name: b.name ?? "", tempPassword: pw, entries: b.entries });
+        have.add(m);
+      }
+      if (created.length >= 300) break; // safety cap
+    }
+    return Response.json({ ok: true, created });
   }
 
   // Provision a login for an existing (pre-accounts) student, keyed by matric.

@@ -858,6 +858,57 @@ export async function saveBackup(
   }
 }
 
+/** Count the logbook entries inside a stored backup snapshot (server-side, so
+ *  we can't reuse the client backup helper). Handles both the {v,data} and the
+ *  full-file {app,data} shapes — both keep entries under siwes.entries.v1. */
+function backupEntryCount(data: string | null): number {
+  if (!data) return 0;
+  try {
+    const parsed = JSON.parse(data);
+    const rec = (parsed?.data ?? parsed) as Record<string, string>;
+    const raw = rec?.["siwes.entries.v1"];
+    if (!raw) return 0;
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export interface BackupInfo {
+  matric: string;
+  name?: string;
+  updated: number;
+  entries: number;
+}
+
+/** All matric-keyed cloud backups (for founder recovery). Returns a light
+ *  summary — matric, name, when, and how many entries — never the payload. */
+export async function listBackups(): Promise<BackupInfo[]> {
+  if (!kvConfigured()) return [];
+  try {
+    const r = await sb(
+      `${BACKUPS}?select=matric,name,updated,data&order=updated.desc&limit=3000`,
+      { method: "GET" },
+    );
+    if (!r.ok) return [];
+    const rows = (await r.json()) as {
+      matric: string;
+      name: string | null;
+      updated: number | null;
+      data: string | null;
+    }[];
+    return rows.map((row) => ({
+      matric: row.matric,
+      name: row.name ?? undefined,
+      updated: row.updated ?? 0,
+      entries: backupEntryCount(row.data),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function loadBackup(
   matric: string,
 ): Promise<{ data: string; updated: number } | null> {

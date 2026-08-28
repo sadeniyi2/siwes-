@@ -57,6 +57,13 @@ interface AiKeyRow {
   lastUsed: number;
   exhaustedAt: number;
 }
+interface BackupRow {
+  matric: string;
+  name?: string;
+  updated: number;
+  entries: number;
+  hasAccount: boolean;
+}
 interface AccountRow {
   matric: string;
   name: string;
@@ -387,6 +394,51 @@ export default function FounderPage() {
     [token, load],
   );
 
+  // ---- Recover past logbooks (matric backups) ----
+  const [backups, setBackups] = useState<BackupRow[] | null>(null);
+  const [bulkResult, setBulkResult] = useState<
+    { matric: string; name: string; tempPassword: string; entries: number }[] | null
+  >(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const loadBackups = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/founder/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-founder-token": token },
+        body: JSON.stringify({ action: "list-backups" }),
+      });
+      const j = await res.json();
+      if (j.ok) setBackups(j.backups);
+    } catch {
+      /* ignore */
+    }
+  }, [token]);
+  useEffect(() => {
+    if (token && tab === "accounts" && backups === null) loadBackups();
+  }, [token, tab, backups, loadBackups]);
+  const bulkProvision = useCallback(async () => {
+    if (!token) return;
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/founder/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-founder-token": token },
+        body: JSON.stringify({ action: "bulk-provision" }),
+      });
+      const j = await res.json();
+      if (j.ok) {
+        setBulkResult(j.created);
+        loadBackups();
+        load(token);
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [token, load, loadBackups]);
+
   // ---- Login screen ----
   if (!token) {
     return (
@@ -612,6 +664,131 @@ export default function FounderPage() {
                 <p className="mt-3 rounded-xl border border-margin/30 bg-margin/10 px-3 py-2 text-sm text-margin">
                   {acctMsg}
                 </p>
+              )}
+            </div>
+          )}
+
+          {tab === "accounts" && (
+            <div className="mb-3 rounded-2xl border border-ink/10 bg-paper-sheet p-4 shadow-card">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="font-display text-base font-semibold">
+                    Recover past logbooks
+                  </h2>
+                  <p className="mt-0.5 text-sm text-ink-soft">
+                    Students whose logbook was backed up (by matric) before accounts
+                    existed. Give them all a login in one click — each keeps their data.
+                  </p>
+                </div>
+                {backups && backups.some((b) => !b.hasAccount) && (
+                  <button
+                    onClick={bulkProvision}
+                    disabled={bulkBusy}
+                    className="btn-primary py-2 disabled:opacity-60"
+                  >
+                    {bulkBusy
+                      ? "Creating…"
+                      : `Create logins for all ${backups.filter((b) => !b.hasAccount).length} recoverable`}
+                  </button>
+                )}
+              </div>
+
+              {bulkResult && bulkResult.length > 0 && (
+                <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <p className="mb-2 text-sm font-medium">
+                    Created {bulkResult.length} login{bulkResult.length === 1 ? "" : "s"}.
+                    Send each student their matric + temporary password:
+                  </p>
+                  <div className="max-h-56 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {bulkResult.map((r) => (
+                          <tr key={r.matric} className="border-b border-ink/5">
+                            <td className="py-1.5 pr-2 font-mono">{r.matric}</td>
+                            <td className="py-1.5 pr-2 text-ink-soft">{r.name || "—"}</td>
+                            <td className="py-1.5 pr-2">
+                              <span className="select-all rounded bg-ink/10 px-1.5 py-0.5 font-mono font-semibold">
+                                {r.tempPassword}
+                              </span>
+                            </td>
+                            <td className="py-1.5 text-xs text-ink-faint">
+                              {r.entries} {r.entries === 1 ? "entry" : "entries"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <button
+                    onClick={() =>
+                      navigator.clipboard
+                        ?.writeText(
+                          bulkResult
+                            .map((r) => `${r.matric}\t${r.name}\t${r.tempPassword}`)
+                            .join("\n"),
+                        )
+                        .catch(() => {})
+                    }
+                    className="btn-ghost mt-2 py-1.5 text-xs"
+                  >
+                    ⧉ Copy all as a list
+                  </button>
+                </div>
+              )}
+
+              {backups === null ? (
+                <p className="mt-3 text-sm text-ink-faint">Loading backups…</p>
+              ) : backups.length === 0 ? (
+                <p className="mt-3 text-sm text-ink-faint">
+                  No matric backups found. (Only students who used the app while cloud
+                  backup was on will appear here.)
+                </p>
+              ) : (
+                <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-ink/10">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead>
+                      <tr className="border-b border-ink/10 text-left text-xs uppercase tracking-wider text-ink-faint">
+                        <th className="px-3 py-2">Matric</th>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Entries</th>
+                        <th className="px-3 py-2">Backed up</th>
+                        <th className="px-3 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {backups.map((b) => (
+                        <tr key={b.matric} className="border-b border-ink/5">
+                          <td className="px-3 py-2 font-mono">{b.matric}</td>
+                          <td className="px-3 py-2 text-ink-soft">{b.name || "—"}</td>
+                          <td className="px-3 py-2">{b.entries}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-ink-soft">
+                            {b.updated ? timeAgo(b.updated) : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {b.hasAccount ? (
+                              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
+                                has login
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() =>
+                                  accountsApi({
+                                    action: "create-account",
+                                    matric: b.matric,
+                                    name: b.name || "",
+                                  })
+                                }
+                                className="text-xs font-medium text-accent-dark hover:underline"
+                              >
+                                Create login
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}
