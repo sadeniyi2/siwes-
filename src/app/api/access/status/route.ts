@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
   if (!claims) return Response.json({ valid: false });
 
   // Account-backed token → reload the account and re-issue a fresh token.
-  if (claims.email && kvConfigured() && claims.role !== "admin") {
-    const acc = await getAccount(claims.email);
+  if (claims.matric && kvConfigured() && claims.role !== "admin") {
+    const acc = await getAccount(claims.matric);
     if (acc) {
       const issued = issueAccountToken(acc);
       return Response.json({
@@ -33,9 +33,10 @@ export async function POST(req: NextRequest) {
         tier: issued.tier ?? null,
         kind: issued.kind ?? null,
         exp: issued.exp,
-        email: acc.email,
+        matric: acc.matric,
         name: acc.name ?? "",
         token: issued.token,
+        mustReset: acc.mustReset ?? false,
       });
     }
   }
@@ -46,6 +47,6 @@ export async function POST(req: NextRequest) {
     access: hasTier,
     tier: claims.tier ?? null,
     kind: claims.kind ?? "paid",
-    email: claims.email,
+    matric: claims.matric ?? null,
   });
 }

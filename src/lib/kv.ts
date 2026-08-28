@@ -858,6 +858,57 @@ export async function saveBackup(
   }
 }
 
+/** Count the logbook entries inside a stored backup snapshot (server-side, so
+ *  we can't reuse the client backup helper). Handles both the {v,data} and the
+ *  full-file {app,data} shapes — both keep entries under siwes.entries.v1. */
+function backupEntryCount(data: string | null): number {
+  if (!data) return 0;
+  try {
+    const parsed = JSON.parse(data);
+    const rec = (parsed?.data ?? parsed) as Record<string, string>;
+    const raw = rec?.["siwes.entries.v1"];
+    if (!raw) return 0;
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export interface BackupInfo {
+  matric: string;
+  name?: string;
+  updated: number;
+  entries: number;
+}
+
+/** All matric-keyed cloud backups (for founder recovery). Returns a light
+ *  summary — matric, name, when, and how many entries — never the payload. */
+export async function listBackups(): Promise<BackupInfo[]> {
+  if (!kvConfigured()) return [];
+  try {
+    const r = await sb(
+      `${BACKUPS}?select=matric,name,updated,data&order=updated.desc&limit=3000`,
+      { method: "GET" },
+    );
+    if (!r.ok) return [];
+    const rows = (await r.json()) as {
+      matric: string;
+      name: string | null;
+      updated: number | null;
+      data: string | null;
+    }[];
+    return rows.map((row) => ({
+      matric: row.matric,
+      name: row.name ?? undefined,
+      updated: row.updated ?? 0,
+      entries: backupEntryCount(row.data),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function loadBackup(
   matric: string,
 ): Promise<{ data: string; updated: number } | null> {
@@ -886,29 +937,38 @@ export async function loadBackup(
 const ACCOUNTS = "siwes_accounts";
 
 export interface Account {
-  email: string;
+  /** Matric/registration number — the unique account identity (login field). */
+  matric: string;
   name?: string;
+  /** Optional — kept for payment receipts only, never used to sign in. */
+  email?: string;
   passHash?: string;
   salt?: string;
   tier?: string;
   kind?: string;
   trialExp?: number;
-  matric?: string;
   data?: string;
+  /** True until the student sets their own password (after a founder-issued or
+   *  reset temporary password). Forces a change on next login. */
+  mustReset?: boolean;
+  /** Timestamp of a pending "forgot password" request (0/undefined = none). */
+  resetRequested?: number;
   created: number;
   lastSeen: number;
 }
 
 interface AccountRow {
-  email: string;
+  matric: string;
   name: string | null;
+  email: string | null;
   pass_hash: string | null;
   salt: string | null;
   tier: string | null;
   kind: string | null;
   trial_exp: number | null;
-  matric: string | null;
   data: string | null;
+  must_reset: boolean | null;
+  reset_requested: number | null;
   created: number | null;
   last_seen: number | null;
 }
@@ -919,25 +979,28 @@ export function normalizeEmail(raw: string): string {
 
 function toAccount(row: AccountRow): Account {
   return {
-    email: row.email,
+    matric: row.matric,
     name: row.name ?? undefined,
+    email: row.email ?? undefined,
     passHash: row.pass_hash ?? undefined,
     salt: row.salt ?? undefined,
     tier: row.tier ?? undefined,
     kind: row.kind ?? undefined,
     trialExp: row.trial_exp ?? undefined,
-    matric: row.matric ?? undefined,
     data: row.data ?? undefined,
+    mustReset: row.must_reset ?? undefined,
+    resetRequested: row.reset_requested ?? undefined,
     created: row.created ?? 0,
     lastSeen: row.last_seen ?? 0,
   };
 }
 
-export async function getAccount(email: string): Promise<Account | null> {
-  if (!kvConfigured()) return null;
+/** Look up an account by its matric number (the login identity). */
+export async function getAccount(matric: string): Promise<Account | null> {
+  if (!kvConfigured() || !matric.trim()) return null;
   try {
     const r = await sb(
-      `${ACCOUNTS}?email=eq.${encodeURIComponent(normalizeEmail(email))}&select=*`,
+      `${ACCOUNTS}?matric=eq.${encodeURIComponent(normalizeMatric(matric))}&select=*`,
       { method: "GET" },
     );
     if (!r.ok) return null;
@@ -948,24 +1011,37 @@ export async function getAccount(email: string): Promise<Account | null> {
   }
 }
 
-/** Create a new account. Returns false if it already exists or on failure. */
+/** Create a new account keyed by matric. Returns false if it already exists or
+ *  on failure. `opts.data` seeds the logbook (e.g. recovered from a matric
+ *  backup) and `opts.mustReset` forces a password change on first login (used
+ *  when the founder provisions an account with a temporary password). */
 export async function createAccount(
-  email: string,
+  matric: string,
   name: string,
   passHash: string,
   salt: string,
-  matric?: string,
+  opts?: {
+    email?: string;
+    data?: string;
+    mustReset?: boolean;
+    tier?: string;
+    kind?: string;
+  },
 ): Promise<boolean> {
-  if (!kvConfigured()) return false;
+  if (!kvConfigured() || !matric.trim()) return false;
   try {
     const r = await sb(ACCOUNTS, {
       method: "POST",
       body: JSON.stringify({
-        email: normalizeEmail(email),
+        matric: normalizeMatric(matric),
         name: name || null,
+        email: opts?.email ? normalizeEmail(opts.email) : null,
         pass_hash: passHash,
         salt,
-        matric: matric?.trim() || null,
+        data: opts?.data ?? null,
+        tier: opts?.tier ?? null,
+        kind: opts?.kind ?? null,
+        must_reset: opts?.mustReset ?? false,
         created: Date.now(),
         last_seen: Date.now(),
       }),
@@ -977,27 +1053,35 @@ export async function createAccount(
 }
 
 export async function updateAccount(
-  email: string,
+  matric: string,
   patch: Partial<{
     tier: string | null;
     kind: string | null;
     trialExp: number | null;
-    matric: string;
+    email: string;
     name: string;
     data: string;
+    passHash: string;
+    salt: string;
+    mustReset: boolean;
+    resetRequested: number | null;
   }>,
 ): Promise<boolean> {
-  if (!kvConfigured()) return false;
+  if (!kvConfigured() || !matric.trim()) return false;
   const body: Record<string, unknown> = { last_seen: Date.now() };
   if ("tier" in patch) body.tier = patch.tier;
   if ("kind" in patch) body.kind = patch.kind;
   if ("trialExp" in patch) body.trial_exp = patch.trialExp;
-  if (patch.matric !== undefined) body.matric = patch.matric;
+  if (patch.email !== undefined) body.email = normalizeEmail(patch.email);
   if (patch.name !== undefined) body.name = patch.name;
   if (patch.data !== undefined) body.data = patch.data;
+  if (patch.passHash !== undefined) body.pass_hash = patch.passHash;
+  if (patch.salt !== undefined) body.salt = patch.salt;
+  if (patch.mustReset !== undefined) body.must_reset = patch.mustReset;
+  if ("resetRequested" in patch) body.reset_requested = patch.resetRequested;
   try {
     const r = await sb(
-      `${ACCOUNTS}?email=eq.${encodeURIComponent(normalizeEmail(email))}`,
+      `${ACCOUNTS}?matric=eq.${encodeURIComponent(normalizeMatric(matric))}`,
       { method: "PATCH", body: JSON.stringify(body) },
     );
     return r.ok;
@@ -1010,7 +1094,7 @@ export async function listAccounts(): Promise<Account[]> {
   if (!kvConfigured()) return [];
   try {
     const r = await sb(
-      `${ACCOUNTS}?select=email,name,tier,kind,trial_exp,matric,created,last_seen&order=last_seen.desc&limit=2000`,
+      `${ACCOUNTS}?select=matric,name,email,tier,kind,trial_exp,data,must_reset,reset_requested,created,last_seen&order=last_seen.desc&limit=2000`,
       { method: "GET" },
     );
     if (!r.ok) return [];

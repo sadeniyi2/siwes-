@@ -14,6 +14,7 @@ export const TRIAL_DAYS = 3;
 const TOKEN_KEY = "siwes.access.token.v1";
 const TIER_KEY = "siwes.access.tier.v1";
 const KIND_KEY = "siwes.access.kind.v1";
+const MUST_RESET_KEY = "siwes.mustreset.v1";
 const TRIAL_EXP_KEY = "siwes.trial.exp.v1";
 // Persistent marker that a trial was ever started — survives clearAccess so a
 // used-up trial can't be restarted, and /unlock can show the "trial ended"
@@ -59,19 +60,38 @@ export function saveLogin(token: string, tier: Tier | null, kind: Kind | null) {
   window.dispatchEvent(new Event("siwes-access-change"));
 }
 
-/** The email of the signed-in account, read from the stored token (best-effort,
- *  unverified — display only). */
-export function loadEmail(): string {
+/** Whether the signed-in account must set a new password before continuing
+ *  (they signed in with a founder-issued or reset temporary password). */
+export function mustResetPassword(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(MUST_RESET_KEY) === "1";
+}
+
+export function setMustResetPassword(on: boolean) {
+  if (on) localStorage.setItem(MUST_RESET_KEY, "1");
+  else localStorage.removeItem(MUST_RESET_KEY);
+}
+
+function readClaims(): { email?: string; matric?: string; name?: string } | null {
   const token = loadAccessToken();
-  if (!token) return "";
+  if (!token) return null;
   try {
     const payload = token.split(".")[0];
     const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    const claims = JSON.parse(json) as { email?: string };
-    return claims?.email ?? "";
+    return JSON.parse(json);
   } catch {
-    return "";
+    return null;
   }
+}
+
+/** The matric number of the signed-in account (display only, unverified). */
+export function loadMatric(): string {
+  return readClaims()?.matric ?? "";
+}
+
+/** The email of the signed-in account, if any (display only, unverified). */
+export function loadEmail(): string {
+  return readClaims()?.email ?? "";
 }
 
 /** Start a trial: store the trial token and its expiry time. */
@@ -110,6 +130,7 @@ export function clearAccess() {
   localStorage.removeItem(TIER_KEY);
   localStorage.removeItem(KIND_KEY);
   localStorage.removeItem(TRIAL_EXP_KEY);
+  localStorage.removeItem(MUST_RESET_KEY);
   window.dispatchEvent(new Event("siwes-access-change"));
 }
 

@@ -37,11 +37,12 @@ export function issueAccountToken(acc: Account): IssuedToken {
   }
 
   const token = signAccess({
-    email: acc.email,
+    email: acc.email ?? "",
+    matric: acc.matric,
     name: acc.name,
     tier,
     kind,
-    ref: `acct:${acc.email}`,
+    ref: `acct:${acc.matric}`,
     iat: now,
     exp,
   });
@@ -62,22 +63,22 @@ export async function grantToAccount(
     kind: "paid" | "free" | "trial";
     trialExp?: number | null;
   },
-): Promise<{ token: string; email: string } | null> {
+): Promise<{ token: string; matric: string } | null> {
   if (!kvConfigured()) return null;
   const claims = verifyAccess(sessionToken);
-  if (!claims?.email || claims.role === "admin") return null;
-  const acc = await getAccount(claims.email);
+  if (!claims?.matric || claims.role === "admin") return null;
+  const acc = await getAccount(claims.matric);
   if (!acc) return null;
-  await updateAccount(claims.email, {
+  await updateAccount(claims.matric, {
     tier: grant.tier,
     kind: grant.kind,
     trialExp: grant.trialExp ?? null,
   });
-  const updated = (await getAccount(claims.email)) ?? {
+  const updated = (await getAccount(claims.matric)) ?? {
     ...acc,
     tier: grant.tier,
     kind: grant.kind,
     trialExp: grant.trialExp ?? undefined,
   };
-  return { token: issueAccountToken(updated).token, email: claims.email };
+  return { token: issueAccountToken(updated).token, matric: claims.matric };
 }

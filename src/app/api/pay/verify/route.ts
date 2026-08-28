@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     token,
     tier,
-    email: granted?.email || email,
+    email,
     amount,
     txRef,
     transactionId: txId,

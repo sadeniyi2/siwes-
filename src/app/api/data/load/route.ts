@@ -7,9 +7,9 @@ export const runtime = "nodejs";
 /** Load the logged-in student's logbook data from their account. */
 export async function POST(req: NextRequest) {
   const claims = verifyAccess(req.headers.get("x-access-token"));
-  if (!claims?.email) return Response.json({ ok: false }, { status: 401 });
+  if (!claims?.matric) return Response.json({ ok: false }, { status: 401 });
 
-  const acc = await getAccount(claims.email);
+  const acc = await getAccount(claims.matric);
   if (!acc?.data) return Response.json({ ok: true, found: false });
   return Response.json({ ok: true, found: true, data: acc.data });
 }

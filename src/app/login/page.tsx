@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadAccessToken, saveLogin, Kind, Tier } from "@/lib/access";
+import {
+  loadAccessToken,
+  saveLogin,
+  setMustResetPassword,
+  Kind,
+  Tier,
+} from "@/lib/access";
 import { loadProfile } from "@/lib/store";
 
 type Mode = "login" | "signup";
@@ -17,30 +23,36 @@ interface AuthResponse {
   tier?: Tier | null;
   kind?: Kind | null;
   hasAccess?: boolean;
+  mustReset?: boolean;
+  recovered?: boolean;
 }
 
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
-  const [email, setEmail] = useState("");
+  const [matric, setMatric] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Already signed in? Skip the form.
+  // Already signed in? Skip the form. Prefill matric/name from any local profile.
   useEffect(() => {
     if (loadAccessToken()) router.replace("/");
     const p = loadProfile();
-    if (p?.fullName) setName((n) => n || p.fullName);
+    if (p) {
+      if (p.matricNumber) setMatric((m) => m || p.matricNumber || "");
+      if (p.fullName) setName((n) => n || p.fullName || "");
+    }
   }, [router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const mail = email.trim().toLowerCase();
-    if (!mail || !mail.includes("@")) {
-      setError("Please enter a valid email address.");
+    const mat = matric.trim();
+    if (mat.length < 4) {
+      setError("Please enter your matric / registration number.");
       return;
     }
     if (password.length < 6) {
@@ -55,15 +67,14 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const path = mode === "login" ? "/api/auth/login" : "/api/auth/signup";
-      const prof = loadProfile();
       const res = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: mail,
+          matric: mat,
           password,
           name: name.trim(),
-          matric: prof?.matricNumber || "",
+          email: email.trim(),
         }),
       });
       const j = (await res.json().catch(() => ({}))) as AuthResponse;
@@ -71,7 +82,7 @@ export default function LoginPage() {
         setError(
           j.message ||
             (mode === "login"
-              ? "Couldn't sign you in. Check your email and password."
+              ? "Couldn't sign you in. Check your matric number and password."
               : "Couldn't create your account. Please try again."),
         );
         setBusy(false);
@@ -79,9 +90,13 @@ export default function LoginPage() {
       }
       // Store the session. tier/kind are null when the account has no plan yet.
       saveLogin(j.token, j.tier ?? null, j.kind ?? null);
-      // Straight into the app — the access gate routes to /setup (no profile)
-      // or /unlock (no plan) as needed, and the home page syncs the logbook
-      // to/from the account automatically.
+      setMustResetPassword(!!j.mustReset);
+      if (j.mustReset) {
+        router.replace("/account/password");
+        return;
+      }
+      // Into the app — the access gate routes to /setup (no profile) or /unlock
+      // (no plan), and the home page syncs the logbook to/from the account.
       router.replace("/");
     } catch {
       setError("Couldn't reach the server. Please check your connection.");
@@ -99,8 +114,8 @@ export default function LoginPage() {
           {mode === "login" ? "Welcome back" : "Create your account"}
         </h1>
         <p className="mx-auto max-w-sm text-sm leading-relaxed text-ink-soft">
-          Your logbook is saved to your account, so it stays safe even if you
-          clear your browser or switch to another phone.
+          Sign in with your matric number. Your logbook is saved to your account,
+          so it stays safe even if you clear your browser or switch phones.
         </p>
       </div>
 
@@ -128,33 +143,52 @@ export default function LoginPage() {
         onSubmit={submit}
         className="rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-card"
       >
-        {mode === "signup" && (
-          <label className="mb-3 block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
-              Your name
-            </span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Ada Obi"
-              autoComplete="name"
-              className={inputCls}
-            />
-          </label>
-        )}
         <label className="mb-3 block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
-            Email
+            Matric / Reg number
           </span>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            autoComplete="email"
+            value={matric}
+            onChange={(e) => setMatric(e.target.value)}
+            placeholder="e.g. 20/52HA093"
+            autoComplete="username"
             className={inputCls}
           />
         </label>
+
+        {mode === "signup" && (
+          <>
+            <label className="mb-3 block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
+                Your name
+              </span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Ada Obi"
+                autoComplete="name"
+                className={inputCls}
+              />
+            </label>
+            <label className="mb-3 block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
+                Email{" "}
+                <span className="font-normal normal-case tracking-normal text-ink-faint">
+                  (optional — for your receipt)
+                </span>
+              </span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                className={inputCls}
+              />
+            </label>
+          </>
+        )}
+
         <label className="mb-1 block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
             Password
@@ -168,6 +202,17 @@ export default function LoginPage() {
             className={inputCls}
           />
         </label>
+
+        {mode === "login" && (
+          <div className="mt-2 text-right">
+            <a
+              href="/forgot"
+              className="text-xs font-medium text-accent hover:underline"
+            >
+              Forgot password?
+            </a>
+          </div>
+        )}
 
         {error && (
           <p className="animate-rise mt-3 rounded-xl border border-margin/30 bg-margin/10 px-3.5 py-2.5 text-sm text-margin">

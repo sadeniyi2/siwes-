@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
-import { loadEmail, logout } from "@/lib/access";
+import { loadMatric, logout } from "@/lib/access";
 
 const LINKS = [
   { href: "/", label: "Assistant" },
@@ -16,11 +16,11 @@ export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
+  const [matric, setMatric] = useState("");
 
   // Track the signed-in account so we can show it and offer a way out.
   useEffect(() => {
-    const sync = () => setEmail(loadEmail());
+    const sync = () => setMatric(loadMatric());
     sync();
     window.addEventListener("siwes-access-change", sync);
     return () => window.removeEventListener("siwes-access-change", sync);
@@ -75,10 +75,10 @@ export default function Nav() {
           ?
         </button>
         <ThemeToggle className="h-7 w-7 text-ink-faint" />
-        {email && (
+        {matric && (
           <button
             onClick={signOut}
-            title={`Signed in as ${email} — log out`}
+            title={`Signed in as ${matric} — log out`}
             aria-label="Log out"
             className="ml-0.5 flex h-7 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-ink-faint transition-colors hover:bg-margin/10 hover:text-margin"
           >
@@ -162,10 +162,10 @@ export default function Nav() {
             >
               ❓ Show tutorial
             </button>
-            {email && (
+            {matric && (
               <>
                 <p className="truncate px-4 pt-2 text-xs text-ink-faint">
-                  Signed in as {email}
+                  Signed in as {matric}
                 </p>
                 <button
                   onClick={signOut}

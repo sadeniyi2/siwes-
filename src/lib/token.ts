@@ -7,6 +7,9 @@ export type Kind = "paid" | "free" | "trial";
 
 export interface AccessClaims {
   email: string;
+  /** Matric/registration number — the unique identity of an account session
+   *  (students log in with this, not email). Absent on non-account tokens. */
+  matric?: string;
   /** Access tier. Absent = a logged-in session with no paid access yet. */
   tier?: Tier;
   ref: string;
