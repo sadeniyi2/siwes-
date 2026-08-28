@@ -58,13 +58,15 @@ interface AiKeyRow {
   exhaustedAt: number;
 }
 interface AccountRow {
-  email: string;
+  matric: string;
   name: string;
+  email: string;
   tier: string | null;
   kind: string | null;
   trialExp: number;
-  matric: string;
   hasData: boolean;
+  mustReset: boolean;
+  resetRequested: number;
   created: number;
   lastSeen: number;
 }
@@ -353,6 +355,38 @@ export default function FounderPage() {
     [token, load],
   );
 
+  // ---- Accounts: provision a login / reset a password ----
+  const [acctResult, setAcctResult] = useState<
+    { matric: string; tempPassword: string; recovered?: boolean } | null
+  >(null);
+  const [acctMsg, setAcctMsg] = useState<string | null>(null);
+  const [newAcctMatric, setNewAcctMatric] = useState("");
+  const [newAcctName, setNewAcctName] = useState("");
+  const [newAcctTier, setNewAcctTier] = useState<"" | "basic" | "pro">("");
+  const accountsApi = useCallback(
+    async (payload: Record<string, unknown>) => {
+      if (!token) return;
+      setAcctMsg(null);
+      try {
+        const res = await fetch("/api/founder/manage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-founder-token": token },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        if (j.ok && j.tempPassword) {
+          setAcctResult({ matric: j.matric, tempPassword: j.tempPassword, recovered: j.recovered });
+          load(token);
+        } else {
+          setAcctMsg(j.message || "Something went wrong.");
+        }
+      } catch {
+        setAcctMsg("Network error. Please try again.");
+      }
+    },
+    [token, load],
+  );
+
   // ---- Login screen ----
   if (!token) {
     return (
@@ -490,6 +524,97 @@ export default function FounderPage() {
               </button>
             ))}
           </div>
+
+          {tab === "accounts" && (
+            <div className="mb-3 rounded-2xl border border-ink/10 bg-paper-sheet p-4 shadow-card">
+              <h2 className="font-display text-base font-semibold">
+                Create a login for a student
+              </h2>
+              <p className="mb-3 mt-0.5 text-sm text-ink-soft">
+                Enter their matric number. If that matric has a saved backup, their
+                logbook is restored into the account automatically. You&apos;ll get a
+                temporary password to send them — they set their own on first login.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-4">
+                <input
+                  value={newAcctMatric}
+                  onChange={(e) => setNewAcctMatric(e.target.value)}
+                  placeholder="Matric / Reg no."
+                  className="rounded-xl border border-ink/15 bg-paper-sheet px-3 py-2 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <input
+                  value={newAcctName}
+                  onChange={(e) => setNewAcctName(e.target.value)}
+                  placeholder="Name (optional)"
+                  className="rounded-xl border border-ink/15 bg-paper-sheet px-3 py-2 text-sm outline-none focus:border-accent focus:shadow-glow"
+                />
+                <select
+                  value={newAcctTier}
+                  onChange={(e) => setNewAcctTier(e.target.value as "" | "basic" | "pro")}
+                  className="rounded-xl border border-ink/15 bg-paper-sheet px-3 py-2 text-sm outline-none focus:border-accent"
+                >
+                  <option value="">No plan yet</option>
+                  <option value="basic">Give Basic</option>
+                  <option value="pro">Give Pro</option>
+                </select>
+                <button
+                  onClick={() => {
+                    if (newAcctMatric.trim().length < 4) {
+                      setAcctMsg("Enter a valid matric number.");
+                      return;
+                    }
+                    accountsApi({
+                      action: "create-account",
+                      matric: newAcctMatric.trim(),
+                      name: newAcctName.trim(),
+                      tier: newAcctTier || undefined,
+                    });
+                    setNewAcctMatric("");
+                    setNewAcctName("");
+                    setNewAcctTier("");
+                  }}
+                  className="btn-primary py-2"
+                >
+                  Create login
+                </button>
+              </div>
+              {acctResult && (
+                <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">
+                  <p className="font-medium">
+                    Login ready for <span className="font-mono">{acctResult.matric}</span>
+                  </p>
+                  <p className="mt-1">
+                    Temporary password:{" "}
+                    <span className="select-all rounded bg-ink/10 px-1.5 py-0.5 font-mono font-semibold">
+                      {acctResult.tempPassword}
+                    </span>{" "}
+                    <button
+                      onClick={() =>
+                        navigator.clipboard
+                          ?.writeText(acctResult.tempPassword)
+                          .catch(() => {})
+                      }
+                      className="ml-1 text-xs font-medium text-accent-dark hover:underline"
+                    >
+                      Copy
+                    </button>
+                  </p>
+                  <p className="mt-1 text-ink-soft">
+                    Send them their matric + this password. They&apos;ll be asked to set
+                    their own password on first login.
+                    {acctResult.recovered
+                      ? " Their previous logbook was found and restored ✓"
+                      : ""}
+                  </p>
+                </div>
+              )}
+              {acctMsg && (
+                <p className="mt-3 rounded-xl border border-margin/30 bg-margin/10 px-3 py-2 text-sm text-margin">
+                  {acctMsg}
+                </p>
+              )}
+            </div>
+          )}
 
           {tab !== "codes" && tab !== "blocks" && tab !== "aikeys" && (
           <div className="overflow-x-auto rounded-2xl border border-ink/10 bg-paper-sheet shadow-card">
@@ -736,8 +861,8 @@ export default function FounderPage() {
                     <th className="px-4 py-3">Account</th>
                     <th className="px-4 py-3">Plan</th>
                     <th className="px-4 py-3">Logbook</th>
-                    <th className="px-4 py-3">Joined</th>
                     <th className="px-4 py-3">Last seen</th>
+                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -751,7 +876,12 @@ export default function FounderPage() {
                   {data.accounts.map((a) => {
                     const online = Date.now() - a.lastSeen < 5 * 60 * 1000;
                     return (
-                      <tr key={a.email} className="border-b border-ink/5">
+                      <tr
+                        key={a.matric}
+                        className={`border-b border-ink/5 ${
+                          a.resetRequested ? "bg-amber-400/10" : ""
+                        }`}
+                      >
                         <td className="px-4 py-3">
                           <p className="flex items-center gap-1.5 font-medium">
                             {online && (
@@ -759,11 +889,19 @@ export default function FounderPage() {
                             )}
                             {a.name || "—"}
                           </p>
-                          <p className="text-xs text-ink-faint">{a.email}</p>
-                          {a.matric && (
-                            <p className="font-mono text-[11px] text-ink-faint">
-                              {a.matric}
-                            </p>
+                          <p className="font-mono text-[11px] text-ink-faint">{a.matric}</p>
+                          {a.email && (
+                            <p className="text-xs text-ink-faint">{a.email}</p>
+                          )}
+                          {a.resetRequested > 0 && (
+                            <span className="mt-0.5 inline-block rounded-full bg-margin/15 px-1.5 py-0.5 text-[10px] font-semibold text-margin">
+                              password reset requested
+                            </span>
+                          )}
+                          {a.mustReset && (
+                            <span className="ml-1 mt-0.5 inline-block rounded-full bg-ink/10 px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft">
+                              temp password
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -791,10 +929,22 @@ export default function FounderPage() {
                           )}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
-                          {a.created ? timeAgo(a.created) : "—"}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
                           {timeAgo(a.lastSeen)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <button
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Reset the password for ${a.matric}? They'll get a temporary password and must set a new one on next login.`,
+                                )
+                              )
+                                accountsApi({ action: "reset-password", matric: a.matric });
+                            }}
+                            className="text-xs font-medium text-accent-dark hover:underline"
+                          >
+                            Reset password
+                          </button>
                         </td>
                       </tr>
                     );

@@ -1,6 +1,16 @@
 import { NextRequest } from "next/server";
 import { signAccess, Tier, verifyAccess } from "@/lib/token";
-import { deleteTrial, deleteUser, kvConfigured } from "@/lib/kv";
+import {
+  createAccount,
+  deleteTrial,
+  deleteUser,
+  getAccount,
+  kvConfigured,
+  loadBackup,
+  normalizeMatric,
+  updateAccount,
+} from "@/lib/kv";
+import { hashPassword, tempPassword } from "@/lib/password";
 
 export const runtime = "nodejs";
 
@@ -9,6 +19,11 @@ export const runtime = "nodejs";
  *   { action: "delete-trial", id: <matric> }
  *   { action: "delete-user",  id: <userId> }
  *   { action: "grant", email?, name?, tier? }  -> mints a paid token to share
+ *   { action: "create-account", email, name?, matric?, tier? }
+ *        -> provisions a login with a temporary password (recovers the logbook
+ *           from a matric backup if one exists). Returns the temp password once.
+ *   { action: "reset-password", email }
+ *        -> sets a new temporary password on an existing account. Returns it once.
  * Guarded by the admin token in x-founder-token.
  */
 export async function POST(req: NextRequest) {
@@ -23,6 +38,7 @@ export async function POST(req: NextRequest) {
     email?: string;
     name?: string;
     tier?: string;
+    matric?: string;
   } = {};
   try {
     body = await req.json();
@@ -52,6 +68,90 @@ export async function POST(req: NextRequest) {
       { ok: false, message: "Connect Supabase to manage records." },
       { status: 400 },
     );
+  }
+
+  // Provision a login for an existing (pre-accounts) student, keyed by matric.
+  // If that matric has a cloud backup, seed the account with it so their logbook
+  // is restored the moment they sign in — on any device.
+  if (body.action === "create-account") {
+    const matric = normalizeMatric(String(body.matric ?? ""));
+    if (matric.length < 4) {
+      return Response.json(
+        { ok: false, message: "Enter a valid matric / registration number." },
+        { status: 400 },
+      );
+    }
+    if (await getAccount(matric)) {
+      return Response.json(
+        {
+          ok: false,
+          message: "That matric already has an account. Use “Reset password” instead.",
+        },
+        { status: 409 },
+      );
+    }
+    // A matric backup is already stored as the same snapshot JSON the account
+    // uses ({v,data}), so seed it verbatim.
+    let data: string | undefined;
+    const backup = await loadBackup(matric);
+    if (backup?.data) data = backup.data;
+
+    const pw = tempPassword();
+    const { hash, salt } = hashPassword(pw);
+    const tier = body.tier === "basic" ? "basic" : body.tier === "pro" ? "pro" : undefined;
+    const created = await createAccount(
+      matric,
+      String(body.name ?? "").trim(),
+      hash,
+      salt,
+      {
+        email: String(body.email ?? "").trim() || undefined,
+        data,
+        mustReset: true,
+        tier,
+        kind: tier ? "paid" : undefined,
+      },
+    );
+    if (!created) {
+      return Response.json(
+        { ok: false, message: "Couldn't create that account. Please try again." },
+        { status: 500 },
+      );
+    }
+    return Response.json({
+      ok: true,
+      matric,
+      tempPassword: pw,
+      recovered: !!data,
+    });
+  }
+
+  // Reset an existing account to a fresh temporary password (used to answer a
+  // "forgot password" request, or a founder-initiated reset).
+  if (body.action === "reset-password") {
+    const matric = normalizeMatric(String(body.matric ?? ""));
+    const acc = matric ? await getAccount(matric) : null;
+    if (!acc) {
+      return Response.json(
+        { ok: false, message: "No account with that matric number." },
+        { status: 404 },
+      );
+    }
+    const pw = tempPassword();
+    const { hash, salt } = hashPassword(pw);
+    const ok = await updateAccount(matric, {
+      passHash: hash,
+      salt,
+      mustReset: true,
+      resetRequested: null,
+    });
+    if (!ok) {
+      return Response.json(
+        { ok: false, message: "Couldn't reset that password. Please try again." },
+        { status: 500 },
+      );
+    }
+    return Response.json({ ok: true, matric, tempPassword: pw });
   }
 
   const id = String(body.id ?? "").trim();

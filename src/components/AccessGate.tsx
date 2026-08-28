@@ -7,6 +7,7 @@ import {
   loadAccessToken,
   loadTier,
   saveAccess,
+  setMustResetPassword,
   trackPresence,
   Tier,
 } from "@/lib/access";
@@ -54,6 +55,12 @@ export default function AccessGate({
         // Keep the freshest token (reflects server-side access changes).
         const useTier = (j.tier as Tier) || "basic";
         saveAccess(j.token || token, useTier, j.kind ?? "paid");
+        // Signed in with a temporary password → must set a real one first.
+        if (j.mustReset) {
+          setMustResetPassword(true);
+          router.replace("/account/password");
+          return;
+        }
         if (j.access === false) {
           // Logged in but no plan yet → choose a trial/plan.
           router.replace("/unlock");
