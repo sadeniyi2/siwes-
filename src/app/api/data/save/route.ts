@@ -11,10 +11,12 @@ export async function POST(req: NextRequest) {
 
   let data = "";
   let name = "";
+  let email = "";
   try {
     const b = await req.json();
     data = String(b?.data ?? "");
     name = String(b?.name ?? "").trim().slice(0, 120);
+    email = String(b?.email ?? "").trim().slice(0, 160);
   } catch {
     /* ignore */
   }
@@ -23,6 +25,7 @@ export async function POST(req: NextRequest) {
 
   const patch: Parameters<typeof updateAccount>[1] = { data };
   if (name) patch.name = name;
+  if (email.includes("@")) patch.email = email;
   const ok = await updateAccount(claims.matric, patch);
   return Response.json({ ok });
 }
