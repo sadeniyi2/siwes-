@@ -664,9 +664,12 @@ export async function hasServerKey(): Promise<boolean> {
   if (process.env.GEMINI_API_KEY) return true;
   if (!kvConfigured()) return false;
   try {
-    const r = await sb(`${AI_KEYS}?select=id&enabled=eq.true&limit=1`, {
-      method: "GET",
-    });
+    // Treat a NULL `enabled` the same as true — matches how the founder panel
+    // displays keys, so a key that looks on there is also usable here.
+    const r = await sb(
+      `${AI_KEYS}?select=id&or=(enabled.eq.true,enabled.is.null)&limit=1`,
+      { method: "GET" },
+    );
     if (!r.ok) return false;
     const rows = (await r.json()) as AiKeyRow[];
     return rows.length > 0;
@@ -683,7 +686,7 @@ export async function pickAiKey(
   try {
     const now = Date.now();
     const r = await sb(
-      `${AI_KEYS}?select=*&enabled=eq.true&order=last_used.asc.nullsfirst&limit=50`,
+      `${AI_KEYS}?select=*&or=(enabled.eq.true,enabled.is.null)&order=last_used.asc.nullsfirst&limit=50`,
       { method: "GET" },
     );
     if (!r.ok) return null;

@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { buildSystemPrompt } from "@/lib/prompt";
 import { verifyAccess } from "@/lib/token";
 import { isProAction } from "@/lib/plans";
+import { AI_MODELS, isModelError } from "@/lib/aimodels";
 import {
   bumpAiKeyUse,
   checkAndBumpUsage,
@@ -13,11 +14,6 @@ import type { ChatRequestBody } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
-
-// gemini-flash-latest is an alias that always resolves to the current free-tier
-// Flash model, so it won't 404 when Google retires a specific version.
-// Override via the GEMINI_MODEL env var to pin a specific model.
-const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
 /** Turn a raw Gemini error into a clean, friendly message the user can read. */
 function friendlyMessage(message: string): string {
@@ -212,11 +208,28 @@ export async function POST(req: NextRequest) {
 
     try {
       const ai = new GoogleGenAI({ apiKey: key });
-      stream = await ai.models.generateContentStream({
-        model: MODEL,
-        contents,
-        config: genConfig,
-      });
+      // Try each model candidate; a "model not found" falls through to the next
+      // so a retired/renamed model can't take the whole app down.
+      let modelErr: unknown = null;
+      for (const model of AI_MODELS) {
+        try {
+          stream = await ai.models.generateContentStream({
+            model,
+            contents,
+            config: genConfig,
+          });
+          modelErr = null;
+          break;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (isModelError(msg)) {
+            modelErr = e;
+            continue;
+          }
+          throw e;
+        }
+      }
+      if (!stream && modelErr) throw modelErr;
       if (poolId != null) void bumpAiKeyUse(poolId, poolUses);
       break;
     } catch (err) {
