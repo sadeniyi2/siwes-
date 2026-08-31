@@ -10,9 +10,7 @@ import {
   saveLogin,
   setMustResetPassword,
 } from "@/lib/access";
-
-const inputCls =
-  "w-full rounded-xl border border-ink/15 bg-paper-sheet px-3.5 py-2.5 text-sm shadow-card outline-none transition-all duration-200 focus:border-accent focus:shadow-glow";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -96,12 +94,10 @@ export default function ChangePasswordPage() {
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
               Current password
             </span>
-            <input
-              type="password"
+            <PasswordInput
               value={current}
-              onChange={(e) => setCurrent(e.target.value)}
+              onChange={setCurrent}
               autoComplete="current-password"
-              className={inputCls}
             />
           </label>
         )}
@@ -109,25 +105,21 @@ export default function ChangePasswordPage() {
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
             New password
           </span>
-          <input
-            type="password"
+          <PasswordInput
             value={next}
-            onChange={(e) => setNext(e.target.value)}
+            onChange={setNext}
             placeholder="At least 6 characters"
             autoComplete="new-password"
-            className={inputCls}
           />
         </label>
         <label className="mb-1 block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
             Confirm new password
           </span>
-          <input
-            type="password"
+          <PasswordInput
             value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
+            onChange={setConfirm}
             autoComplete="new-password"
-            className={inputCls}
           />
         </label>
 

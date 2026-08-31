@@ -3,6 +3,8 @@ export const WORK_DAYS = ["MON", "TUE", "WED", "THUR", "FRI", "SAT"] as const;
 export interface Profile {
   fullName: string;
   matricNumber?: string;
+  /** Email — optional, used for receipts and password-reset links. */
+  email?: string;
   institution?: string;
   course?: string;
   firmName: string;

@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import { NextRequest } from "next/server";
 import { verifyAccess } from "@/lib/token";
 import {
@@ -5,8 +6,10 @@ import {
   deleteAiKey,
   kvConfigured,
   listAiKeys,
+  pickAiKey,
   setAiKeyEnabled,
 } from "@/lib/kv";
+import { AI_MODELS, isModelError } from "@/lib/aimodels";
 
 export const runtime = "nodejs";
 
@@ -38,6 +41,73 @@ export async function POST(req: NextRequest) {
   }
 
   const action = body.action ?? "list";
+
+  // End-to-end check: pick a key exactly as the chat would and make a tiny real
+  // request, so the founder sees the true cause (no key / disabled / rejected /
+  // quota / bad model) instead of just a status colour.
+  if (action === "test") {
+    let key: string | undefined;
+    let source = "";
+    const cand = await pickAiKey([]);
+    if (cand) {
+      key = cand.key;
+      source = `pool key #${cand.id}`;
+    } else if (process.env.GEMINI_API_KEY) {
+      key = process.env.GEMINI_API_KEY;
+      source = "environment key";
+    }
+    if (!key) {
+      return Response.json({
+        ok: true,
+        test: {
+          status: "no_key",
+          message:
+            "No usable key was found. Add a key and make sure its toggle is ON (enabled).",
+        },
+      });
+    }
+    try {
+      const ai = new GoogleGenAI({ apiKey: key });
+      let usedModel = "";
+      let lastErr: unknown = null;
+      for (const model of AI_MODELS) {
+        try {
+          await ai.models.generateContent({
+            model,
+            contents: [{ role: "user", parts: [{ text: "Reply with: OK" }] }],
+            config: { maxOutputTokens: 5 },
+          });
+          usedModel = model;
+          lastErr = null;
+          break;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (isModelError(msg)) {
+            lastErr = e;
+            continue;
+          }
+          throw e;
+        }
+      }
+      if (!usedModel && lastErr) throw lastErr;
+      return Response.json({
+        ok: true,
+        test: {
+          status: "ok",
+          source,
+          model: usedModel,
+          message: `Working ✓ — using ${source}, model "${usedModel}".`,
+        },
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return Response.json({
+        ok: true,
+        test: { status: "error", source, message: msg.slice(0, 300) },
+      });
+    }
+  }
+
   if (action === "add") {
     const key = String(body.key ?? "").trim();
     if (!key) {

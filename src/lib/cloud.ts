@@ -28,6 +28,7 @@ export function pushCloudBackup(delay = 2000) {
           data,
           matric: profile?.matricNumber,
           name: profile?.fullName,
+          email: profile?.email,
         }),
         keepalive: true,
       });

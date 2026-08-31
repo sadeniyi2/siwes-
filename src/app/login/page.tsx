@@ -10,6 +10,7 @@ import {
   Tier,
 } from "@/lib/access";
 import { loadProfile } from "@/lib/store";
+import PasswordInput from "@/components/PasswordInput";
 
 type Mode = "login" | "signup";
 
@@ -193,13 +194,11 @@ export default function LoginPage() {
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-ink-faint">
             Password
           </span>
-          <input
-            type="password"
+          <PasswordInput
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
             placeholder="At least 6 characters"
             autoComplete={mode === "login" ? "current-password" : "new-password"}
-            className={inputCls}
           />
         </label>
 

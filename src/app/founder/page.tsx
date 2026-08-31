@@ -298,6 +298,28 @@ export default function FounderPage() {
     if (token && tab === "aikeys" && aiKeys === null) aiKeysApi({ action: "list" });
   }, [token, tab, aiKeys, aiKeysApi]);
 
+  // Real end-to-end AI check (surfaces the true cause of a chat failure).
+  const [aiTest, setAiTest] = useState<{ status: string; message: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const testAi = useCallback(async () => {
+    if (!token) return;
+    setTesting(true);
+    setAiTest(null);
+    try {
+      const res = await fetch("/api/founder/aikeys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-founder-token": token },
+        body: JSON.stringify({ action: "test" }),
+      });
+      const j = await res.json();
+      setAiTest(j.test ?? { status: "error", message: "No response from server." });
+    } catch {
+      setAiTest({ status: "error", message: "Network error. Please try again." });
+    } finally {
+      setTesting(false);
+    }
+  }, [token]);
+
   function randomCode() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let s = "";
@@ -1523,6 +1545,48 @@ export default function FounderPage() {
                 </a>
                 .
               </p>
+
+              <div className="mb-4 rounded-xl border border-ink/10 bg-paper p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm">
+                    <span className="font-medium">Chat not working for students?</span>{" "}
+                    Run a live test — it shows the real reason.
+                  </p>
+                  <button
+                    onClick={testAi}
+                    disabled={testing}
+                    className="btn-primary py-2 disabled:opacity-60"
+                  >
+                    {testing ? "Testing…" : "Test the AI now"}
+                  </button>
+                </div>
+                {aiTest && (
+                  <div
+                    className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
+                      aiTest.status === "ok"
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                        : "border-margin/30 bg-margin/10 text-margin"
+                    }`}
+                  >
+                    <p className="font-medium">
+                      {aiTest.status === "ok"
+                        ? "AI is working ✓"
+                        : aiTest.status === "no_key"
+                          ? "No usable key"
+                          : "AI test failed"}
+                    </p>
+                    <p className="mt-0.5 break-words">{aiTest.message}</p>
+                    {aiTest.status !== "ok" && (
+                      <p className="mt-1 text-xs text-ink-soft">
+                        Common fixes: make sure a key&apos;s toggle is ON below; if it
+                        says the key was rejected, the key is wrong or its Gemini API
+                        isn&apos;t enabled; if it mentions quota, all keys are at their
+                        daily limit (add another).
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {!data.tracking && (
                 <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">

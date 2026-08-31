@@ -11,6 +11,7 @@ import { pushCloudBackup } from "@/lib/cloud";
 const EMPTY: Profile = {
   fullName: "",
   matricNumber: "",
+  email: "",
   institution: "",
   course: "",
   firmName: "",
@@ -195,6 +196,15 @@ export default function SetupPage() {
               value={p.matricNumber}
               onChange={(e) => set("matricNumber", e.target.value)}
               placeholder="e.g. 20/52HA093"
+            />
+          </Field>
+          <Field label="Email">
+            <input
+              type="email"
+              className={inputCls}
+              value={p.email}
+              onChange={(e) => set("email", e.target.value)}
+              placeholder="you@example.com — for receipts & password reset"
             />
           </Field>
           <Field label="Institution">
