@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 
-export const maxDuration = 30; // Extend Vercel timeout for AI image processing
+export const maxDuration = 30;
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -13,6 +13,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No image provided" }, { status: 400 });
     }
 
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
     const prompt = `
       You are an expert logbook extraction assistant for a SIWES (Student Industrial Work Experience Scheme) logbook.
       Analyze this image of a handwritten weekly logbook page chart.
@@ -23,29 +25,37 @@ export async function POST(req: Request) {
       2. Extract the complete text written under "DESCRIPTION OF WORKDONE".
       
       Return ONLY a valid JSON array of objects with keys: "date" (YYYY-MM-DD string) and "description" (string).
-      Do not include markdown ticks, backticks, or extra explanation. Just the raw JSON array.
+      Example: [{"date": "2026-08-31", "description": "Conducted morning briefing."}]
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: [
         {
           role: "user",
           parts: [
             { text: prompt },
-            { inlineData: { data: imageBase64, mimeType: mimeType || "image/jpeg" } }
+            { inlineData: { data: cleanBase64, mimeType: mimeType || "image/jpeg" } }
           ]
         }
       ]
     });
 
     const rawText = response.text || "[]";
-    const cleanJson = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-    const extractedData = JSON.parse(cleanJson);
+    
+    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      return NextResponse.json({ error: "Could not read structured entries from image." }, { status: 422 });
+    }
+
+    const extractedData = JSON.parse(jsonMatch[0]);
 
     return NextResponse.json({ success: true, entries: extractedData });
   } catch (error) {
-    console.error("Vision AI Error:", error);
-    return NextResponse.json({ error: "Failed to process image. Image might be too large or invalid." }, { status: 500 });
+    console.error("Vision AI Error Detail:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to process image." }, 
+      { status: 500 }
+    );
   }
 }
