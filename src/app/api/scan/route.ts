@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const maxDuration = 30;
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
@@ -28,21 +28,22 @@ export async function POST(req: Request) {
       Example: [{"date": "2026-08-31", "description": "Conducted morning briefing."}]
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: prompt },
-            { inlineData: { data: cleanBase64, mimeType: mimeType || "image/jpeg" } }
-          ]
-        }
-      ]
-    });
+    // Uses gemini-1.5-flash / gemini-2.0-flash via standard AI Studio key
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const rawText = response.text || "[]";
-    
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: cleanBase64,
+          mimeType: mimeType || "image/jpeg",
+        },
+      },
+    ]);
+
+    const response = await result.response;
+    const rawText = response.text() || "[]";
+
     const jsonMatch = rawText.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       return NextResponse.json({ error: "Could not read structured entries from image." }, { status: 422 });
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Vision AI Error Detail:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to process image." }, 
+      { error: error instanceof Error ? error.message : "Failed to process image." },
       { status: 500 }
     );
   }
