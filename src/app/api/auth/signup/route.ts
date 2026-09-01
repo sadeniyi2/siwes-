@@ -72,13 +72,26 @@ export async function POST(req: NextRequest) {
   }
 
   const { hash, salt } = hashPassword(password);
-  const ok = await createAccount(matric, name, hash, salt, {
+  const created = await createAccount(matric, name, hash, salt, {
     email: email || undefined,
     data,
   });
-  if (!ok) {
+  if (!created.ok) {
+    if (created.conflict) {
+      return Response.json(
+        {
+          ok: false,
+          message: "That matric number already has an account — please log in instead.",
+        },
+        { status: 409 },
+      );
+    }
     return Response.json(
-      { ok: false, message: "Couldn't create your account. Please try again." },
+      {
+        ok: false,
+        message: "Couldn't create your account. Please try again.",
+        detail: created.error,
+      },
       { status: 500 },
     );
   }

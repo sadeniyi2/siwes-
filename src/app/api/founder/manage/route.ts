@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
         data: backup?.data,
         mustReset: true,
       });
-      if (ok) {
+      if (ok.ok) {
         created.push({ matric: m, name: b.name ?? "", tempPassword: pw, entries: b.entries });
         have.add(m);
       }
@@ -159,10 +159,16 @@ export async function POST(req: NextRequest) {
         kind: tier ? "paid" : undefined,
       },
     );
-    if (!created) {
+    if (!created.ok) {
       return Response.json(
-        { ok: false, message: "Couldn't create that account. Please try again." },
-        { status: 500 },
+        {
+          ok: false,
+          message: created.conflict
+            ? "That matric already has an account. Use “Reset password” instead."
+            : "Couldn't create that account. Please try again.",
+          detail: created.error,
+        },
+        { status: created.conflict ? 409 : 500 },
       );
     }
     return Response.json({

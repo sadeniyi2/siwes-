@@ -1018,6 +1018,14 @@ export async function getAccount(matric: string): Promise<Account | null> {
  *  on failure. `opts.data` seeds the logbook (e.g. recovered from a matric
  *  backup) and `opts.mustReset` forces a password change on first login (used
  *  when the founder provisions an account with a temporary password). */
+export interface CreateAccountResult {
+  ok: boolean;
+  /** True when the failure is because the matric already has an account. */
+  conflict: boolean;
+  /** The underlying error (e.g. a missing table/column), for diagnostics. */
+  error?: string;
+}
+
 export async function createAccount(
   matric: string,
   name: string,
@@ -1030,11 +1038,14 @@ export async function createAccount(
     tier?: string;
     kind?: string;
   },
-): Promise<boolean> {
-  if (!kvConfigured() || !matric.trim()) return false;
+): Promise<CreateAccountResult> {
+  if (!kvConfigured() || !matric.trim()) {
+    return { ok: false, conflict: false, error: "not configured" };
+  }
   try {
     const r = await sb(ACCOUNTS, {
       method: "POST",
+      headers: { Prefer: "return=minimal" },
       body: JSON.stringify({
         matric: normalizeMatric(matric),
         name: name || null,
@@ -1049,9 +1060,15 @@ export async function createAccount(
         last_seen: Date.now(),
       }),
     });
-    return r.ok; // 409 (already exists) -> not ok
-  } catch {
-    return false;
+    if (r.ok) return { ok: true, conflict: false };
+    const text = (await r.text().catch(() => "")).slice(0, 200);
+    const conflict = r.status === 409;
+    if (!conflict) console.error("createAccount failed", r.status, text);
+    return { ok: false, conflict, error: text || `HTTP ${r.status}` };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    console.error("createAccount threw", error);
+    return { ok: false, conflict: false, error };
   }
 }
 

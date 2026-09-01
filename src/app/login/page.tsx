@@ -26,6 +26,7 @@ interface AuthResponse {
   hasAccess?: boolean;
   mustReset?: boolean;
   recovered?: boolean;
+  detail?: string;
 }
 
 export default function LoginPage() {
@@ -37,6 +38,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
 
   // Already signed in? Skip the form. Prefill matric/name from any local profile.
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function LoginPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setDetail(null);
     const mat = matric.trim();
     if (mat.length < 4) {
       setError("Please enter your matric / registration number.");
@@ -86,6 +89,7 @@ export default function LoginPage() {
               ? "Couldn't sign you in. Check your matric number and password."
               : "Couldn't create your account. Please try again."),
         );
+        setDetail(j.detail ?? null);
         setBusy(false);
         return;
       }
@@ -214,9 +218,14 @@ export default function LoginPage() {
         )}
 
         {error && (
-          <p className="animate-rise mt-3 rounded-xl border border-margin/30 bg-margin/10 px-3.5 py-2.5 text-sm text-margin">
-            {error}
-          </p>
+          <div className="animate-rise mt-3 rounded-xl border border-margin/30 bg-margin/10 px-3.5 py-2.5 text-sm text-margin">
+            <p>{error}</p>
+            {detail && (
+              <p className="mt-1 break-words font-mono text-[11px] opacity-80">
+                {detail}
+              </p>
+            )}
+          </div>
         )}
 
         <button
