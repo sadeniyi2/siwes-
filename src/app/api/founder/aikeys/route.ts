@@ -9,7 +9,7 @@ import {
   pickAiKey,
   setAiKeyEnabled,
 } from "@/lib/kv";
-import { AI_MODELS, isModelError } from "@/lib/aimodels";
+import { AI_MODELS, isModelError, isOverload, sleep } from "@/lib/aimodels";
 
 export const runtime = "nodejs";
 
@@ -71,23 +71,32 @@ export async function POST(req: NextRequest) {
       let usedModel = "";
       let lastErr: unknown = null;
       for (const model of AI_MODELS) {
-        try {
-          await ai.models.generateContent({
-            model,
-            contents: [{ role: "user", parts: [{ text: "Reply with: OK" }] }],
-            config: { maxOutputTokens: 5 },
-          });
-          usedModel = model;
-          lastErr = null;
-          break;
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (isModelError(msg)) {
+        let advance = false;
+        for (let retry = 0; retry < 2 && !advance; retry++) {
+          try {
+            await ai.models.generateContent({
+              model,
+              contents: [{ role: "user", parts: [{ text: "Reply with: OK" }] }],
+              config: { maxOutputTokens: 5 },
+            });
+            usedModel = model;
+            lastErr = null;
+            break;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
             lastErr = e;
-            continue;
+            if (isOverload(msg) && retry === 0) {
+              await sleep(700);
+              continue;
+            }
+            if (isModelError(msg) || isOverload(msg)) {
+              advance = true;
+              break;
+            }
+            throw e;
           }
-          throw e;
         }
+        if (usedModel) break;
       }
       if (!usedModel && lastErr) throw lastErr;
       return Response.json({

@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { buildSystemPrompt } from "@/lib/prompt";
 import { verifyAccess } from "@/lib/token";
 import { isProAction } from "@/lib/plans";
-import { AI_MODELS, isModelError } from "@/lib/aimodels";
+import { AI_MODELS, isModelError, isOverload, sleep } from "@/lib/aimodels";
 import {
   bumpAiKeyUse,
   checkAndBumpUsage,
@@ -208,26 +208,38 @@ export async function POST(req: NextRequest) {
 
     try {
       const ai = new GoogleGenAI({ apiKey: key });
-      // Try each model candidate; a "model not found" falls through to the next
-      // so a retired/renamed model can't take the whole app down.
+      // Try each model candidate. A "model not found" OR a temporary overload
+      // ("high demand", 503) falls through to the next model — different model
+      // versions have separate capacity — and an overload also gets one quick
+      // retry on the same model first. Quota / invalid-key errors are re-thrown
+      // so the outer loop can rotate to another key.
       let modelErr: unknown = null;
       for (const model of AI_MODELS) {
-        try {
-          stream = await ai.models.generateContentStream({
-            model,
-            contents,
-            config: genConfig,
-          });
-          modelErr = null;
-          break;
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (isModelError(msg)) {
+        let advance = false;
+        for (let retry = 0; retry < 2 && !advance; retry++) {
+          try {
+            stream = await ai.models.generateContentStream({
+              model,
+              contents,
+              config: genConfig,
+            });
+            modelErr = null;
+            break;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
             modelErr = e;
-            continue;
+            if (isOverload(msg) && retry === 0) {
+              await sleep(700); // brief backoff, then retry the same model once
+              continue;
+            }
+            if (isModelError(msg) || isOverload(msg)) {
+              advance = true; // give up on this model, try the next one
+              break;
+            }
+            throw e; // quota / invalid key → rotate keys in the outer loop
           }
-          throw e;
         }
+        if (stream) break;
       }
       if (!stream && modelErr) throw modelErr;
       if (poolId != null) void bumpAiKeyUse(poolId, poolUses);
