@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
       contents: [
         {
           role: "user",
@@ -32,7 +32,6 @@ export async function POST(req: Request) {
       ]
     });
 
-    // Parse the JSON returned by the AI
     const rawText = response.text || "[]";
     const cleanJson = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
     const extractedData = JSON.parse(cleanJson);
