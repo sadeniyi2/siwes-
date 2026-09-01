@@ -11,7 +11,7 @@ const FALLBACKS = [
   "gemini-2.5-flash",
   "gemini-flash-latest",
   "gemini-2.0-flash-001",
-  "gemini-1.5-flash",
+  "gemini-2.5-flash",
 ];
 
 export const AI_MODELS: string[] = process.env.GEMINI_MODEL
