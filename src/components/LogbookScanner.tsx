@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { compressImage } from "@/lib/image";
 
 export interface LogbookEntryExtracted {
   date: string;
@@ -26,42 +27,46 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
     setLoading(true);
     setPendingEntries([]);
 
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
+    try {
+      // Compress heavy camera photos to prevent "Request Entity Too Large" errors
+      const compressedBase64 = await compressImage(file);
+      setPreview(compressedBase64);
 
-    reader.onload = async () => {
-      const result = reader.result as string;
-      setPreview(result);
-      const base64Data = result.split(",")[1];
+      const base64Data = compressedBase64.split(",")[1];
 
+      const response = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: base64Data,
+          mimeType: "image/jpeg",
+        }),
+      });
+
+      // Safely handle non-JSON server error responses (like 413 Payload Too Large)
+      const textResponse = await response.text();
+      let data;
       try {
-        const response = await fetch("/api/scan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            imageBase64: base64Data,
-            mimeType: file.type,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to scan page.");
-        }
-
-        if (data.entries && data.entries.length > 0) {
-          setPendingEntries(data.entries);
-        } else {
-          setError("No legible entries found in this picture. Please try a clearer photo.");
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Something went wrong";
-        setError(msg);
-      } finally {
-        setLoading(false);
+        data = JSON.parse(textResponse);
+      } catch {
+        throw new Error("Image file is too large for the server. Try taking a closer photo of just the table.");
       }
-    };
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to scan page.");
+      }
+
+      if (data.entries && data.entries.length > 0) {
+        setPendingEntries(data.entries);
+      } else {
+        setError("No legible entries found in this picture. Please try a clearer photo.");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAcknowledge = () => {
@@ -91,7 +96,7 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
         </div>
 
         <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-accent rounded-xl hover:bg-accent-dark transition-all shadow-lift shrink-0">
-          <span>{loading ? "Scanning with AI..." : "Take Photo / Choose File"}</span>
+          <span>{loading ? "Compressing & Scanning..." : "Take Photo / Choose File"}</span>
           <input
             type="file"
             accept="image/*"
@@ -109,13 +114,11 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
         </div>
       )}
 
-      {/* Preview, Delete & Acknowledge Section */}
       {preview && (
         <div className="mt-4 pt-4 border-t border-ink/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-ink/15 shadow-card group">
               <img src={preview} alt="Logbook scan preview" className="h-full w-full object-cover" />
-              {/* Delete Overlay Button */}
               <button
                 onClick={handleRemovePhoto}
                 title="Remove uploaded image"
@@ -129,17 +132,11 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
               <p className="text-xs font-semibold text-ink">
                 {pendingEntries.length > 0
                   ? `AI read ${pendingEntries.length} entries from this image.`
-                  : "Processing image..."}
+                  : loading ? "Reading handwriting with AI..." : "Processing complete."}
               </p>
               <p className="text-[11px] text-ink-faint mt-0.5">
                 Review your scan before adding to your chart.
               </p>
-              <button
-                onClick={handleRemovePhoto}
-                className="text-xs text-red-500 hover:text-red-700 font-medium underline mt-1 block md:hidden"
-              >
-                Remove photo
-              </button>
             </div>
           </div>
 

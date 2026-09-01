@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 
+export const maxDuration = 30; // Extend Vercel timeout for AI image processing
+
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export async function POST(req: Request) {
@@ -12,11 +14,16 @@ export async function POST(req: Request) {
     }
 
     const prompt = `
-      You are an expert data extraction assistant for a student logbook. 
-      Analyze this image of a handwritten logbook page.
-      Extract the date, the description of work done (activities), and the hours worked.
-      Return ONLY a valid JSON array of objects with the keys: "date", "description", and "hours". 
-      Do not include any markdown formatting, backticks, or other text. Just the raw JSON array.
+      You are an expert logbook extraction assistant for a SIWES (Student Industrial Work Experience Scheme) logbook.
+      Analyze this image of a handwritten weekly logbook page chart.
+      
+      Extract each day's entry accurately.
+      For each day found (Monday through Saturday):
+      1. Identify the date and format it as an ISO string (YYYY-MM-DD). If the year is missing, assume 2026.
+      2. Extract the complete text written under "DESCRIPTION OF WORKDONE".
+      
+      Return ONLY a valid JSON array of objects with keys: "date" (YYYY-MM-DD string) and "description" (string).
+      Do not include markdown ticks, backticks, or extra explanation. Just the raw JSON array.
     `;
 
     const response = await ai.models.generateContent({
@@ -39,6 +46,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, entries: extractedData });
   } catch (error) {
     console.error("Vision AI Error:", error);
-    return NextResponse.json({ error: "Failed to scan logbook page" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to process image. Image might be too large or invalid." }, { status: 500 });
   }
 }
