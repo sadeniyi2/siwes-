@@ -30,7 +30,7 @@ export async function listGenerateContentModels(ai: GoogleGenAI): Promise<string
 }
 
 export function orderPreferred(models: string[]): string[] {
-  const pref = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"];
+  const pref = ["gemini-2.0-flash", "gemini-3.6-flash", "gemini-flash-latest", "gemini-3.6-flash-lite"];
   const inPref = pref.filter((p) => models.includes(p));
   const otherFlash = models.filter(
     (m) => m.includes("flash") && !inPref.includes(m) && !m.includes("1.5") && !m.includes("1.0") && !m.includes("vision") && !m.includes("thinking") && !m.includes("exp"),
