@@ -332,7 +332,7 @@ export default function FounderPage() {
     try {
       await navigator.clipboard.writeText(c);
       setCopied(c);
-      setTimeout(() => setCopied((v) => (v === c ? null : v)), 1500);
+      setTimeout(() => setCopied((v) => (v === c ? null : v)), 3000);
     } catch {
       /* ignore */
     }

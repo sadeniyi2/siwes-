@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const tier: Tier = best.amount >= 2500 ? "pro" : "basic";
+  const tier: Tier = best.amount >= 5000 ? "pro" : "basic";
   const token = signAccess({
     email: best.email,
     tier,

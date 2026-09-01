@@ -43,7 +43,7 @@ async function fetchSales(): Promise<{ sales: Sale[]; error?: string }> {
           email: t.customer?.email ?? "",
           name: t.customer?.name ?? "",
           amount: amt,
-          tier: amt >= 2500 ? "pro" : amt >= 1500 ? "basic" : "other",
+          tier: amt >= 5000 ? "pro" : amt >= 3000 ? "basic" : "other",
           date: t.created_at,
           ref: t.tx_ref,
         } as Sale;
