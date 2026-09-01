@@ -66,39 +66,50 @@ export async function POST(req: NextRequest) {
         },
       });
     }
-    try {
-      const ai = new GoogleGenAI({ apiKey: key });
-      let usedModel = "";
-      let lastErr: unknown = null;
-      for (const model of AI_MODELS) {
-        let advance = false;
-        for (let retry = 0; retry < 2 && !advance; retry++) {
-          try {
-            await ai.models.generateContent({
-              model,
-              contents: [{ role: "user", parts: [{ text: "Reply with: OK" }] }],
-              config: { maxOutputTokens: 5 },
-            });
-            usedModel = model;
-            lastErr = null;
-            break;
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            lastErr = e;
-            if (isOverload(msg) && retry === 0) {
-              await sleep(700);
-              continue;
-            }
-            if (isModelError(msg) || isOverload(msg)) {
-              advance = true;
-              break;
-            }
-            throw e;
+    const ai = new GoogleGenAI({ apiKey: key });
+    let usedModel = "";
+    const attempts: string[] = [];
+    for (const model of AI_MODELS) {
+      let advance = false;
+      let fatal: { message: string } | null = null;
+      for (let retry = 0; retry < 2 && !advance; retry++) {
+        try {
+          await ai.models.generateContent({
+            model,
+            contents: [{ role: "user", parts: [{ text: "Reply with: OK" }] }],
+            config: { maxOutputTokens: 5 },
+          });
+          usedModel = model;
+          break;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (isOverload(msg) && retry === 0) {
+            await sleep(700);
+            continue;
           }
+          if (isModelError(msg)) {
+            attempts.push(`${model}: not available`);
+            advance = true;
+          } else if (isOverload(msg)) {
+            attempts.push(`${model}: overloaded (503)`);
+            advance = true;
+          } else {
+            // Auth / quota — same for every model, so stop and report it.
+            fatal = { message: msg };
+          }
+          if (fatal) break;
         }
-        if (usedModel) break;
       }
-      if (!usedModel && lastErr) throw lastErr;
+      if (usedModel) break;
+      if (fatal) {
+        return Response.json({
+          ok: true,
+          test: { status: "error", source, message: fatal.message.slice(0, 300) },
+        });
+      }
+    }
+
+    if (usedModel) {
       return Response.json({
         ok: true,
         test: {
@@ -108,13 +119,40 @@ export async function POST(req: NextRequest) {
           message: `Working ✓ — using ${source}, model "${usedModel}".`,
         },
       });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return Response.json({
-        ok: true,
-        test: { status: "error", source, message: msg.slice(0, 300) },
-      });
     }
+
+    // Nothing worked — ask the key which models it actually supports, so we know
+    // exactly what to use (set it as GEMINI_MODEL).
+    let available: string[] = [];
+    try {
+      const pager = await ai.models.list();
+      for await (const m of pager) {
+        const nm = (m.name || "").replace(/^models\//, "");
+        const methods =
+          (m as { supportedActions?: string[] }).supportedActions || [];
+        if (nm && (methods.length === 0 || methods.includes("generateContent"))) {
+          available.push(nm);
+        }
+      }
+    } catch {
+      /* ignore — listing may itself fail if the key is bad */
+    }
+    const flash = available.filter((m) => m.includes("flash")).slice(0, 12);
+    return Response.json({
+      ok: true,
+      test: {
+        status: "error",
+        source,
+        message:
+          `None of the tried models worked (${attempts.join("; ") || "all overloaded"}).` +
+          (flash.length
+            ? ` Your key DOES support these — set GEMINI_MODEL to one of them in Vercel: ${flash.join(", ")}.`
+            : available.length
+              ? ` Available models: ${available.slice(0, 12).join(", ")}.`
+              : " Could not list the key's available models."),
+        available,
+      },
+    });
   }
 
   if (action === "add") {
