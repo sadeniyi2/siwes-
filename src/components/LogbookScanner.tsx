@@ -16,6 +16,7 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [pendingEntries, setPendingEntries] = useState<LogbookEntryExtracted[]>([]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -23,6 +24,7 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
 
     setError(null);
     setLoading(true);
+    setPendingEntries([]);
 
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -49,9 +51,7 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
         }
 
         if (data.entries && data.entries.length > 0) {
-          if (onEntriesExtracted) {
-            onEntriesExtracted(data.entries);
-          }
+          setPendingEntries(data.entries);
         } else {
           setError("No legible entries found in this picture. Please try a clearer photo.");
         }
@@ -62,6 +62,14 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
         setLoading(false);
       }
     };
+  };
+
+  const handleAcknowledge = () => {
+    if (onEntriesExtracted && pendingEntries.length > 0) {
+      onEntriesExtracted(pendingEntries);
+      setPendingEntries([]);
+      setPreview(null);
+    }
   };
 
   return (
@@ -95,9 +103,33 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
         </div>
       )}
 
+      {/* Preview & Acknowledge Section */}
       {preview && (
-        <div className="mt-3 relative h-28 w-28 overflow-hidden rounded-xl border border-ink/15 shadow-card">
-          <img src={preview} alt="Logbook scan preview" className="h-full w-full object-cover" />
+        <div className="mt-4 pt-4 border-t border-ink/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-ink/15 shadow-card">
+              <img src={preview} alt="Logbook scan preview" className="h-full w-full object-cover" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-ink">
+                {pendingEntries.length > 0
+                  ? `AI read ${pendingEntries.length} entries from this image.`
+                  : "Processing image..."}
+              </p>
+              <p className="text-[11px] text-ink-faint mt-0.5">
+                Review your scan before adding to your chart.
+              </p>
+            </div>
+          </div>
+
+          {pendingEntries.length > 0 && (
+            <button
+              onClick={handleAcknowledge}
+              className="w-full md:w-auto px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-lift shrink-0"
+            >
+              ✓ Acknowledge &amp; Populate Logbook
+            </button>
+          )}
         </div>
       )}
     </div>
