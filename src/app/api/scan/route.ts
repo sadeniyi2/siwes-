@@ -3,12 +3,17 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const maxDuration = 30;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
 export async function POST(req: Request) {
   try {
-    const { imageBase64, mimeType } = await req.json();
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "GEMINI_API_KEY environment variable is not configured on Vercel." }, 
+        { status: 500 }
+      );
+    }
 
+    const { imageBase64, mimeType } = await req.json();
     if (!imageBase64) {
       return NextResponse.json({ error: "No image provided" }, { status: 400 });
     }
@@ -28,7 +33,7 @@ export async function POST(req: Request) {
       Example: [{"date": "2026-08-31", "description": "Conducted morning briefing."}]
     `;
 
-    // Uses gemini-1.5-flash / gemini-2.0-flash via standard AI Studio key
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const result = await model.generateContent([
