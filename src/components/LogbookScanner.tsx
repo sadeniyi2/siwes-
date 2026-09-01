@@ -72,6 +72,12 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
     }
   };
 
+  const handleRemovePhoto = () => {
+    setPreview(null);
+    setPendingEntries([]);
+    setError(null);
+  };
+
   return (
     <div className="rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-sheet transition-all">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -103,12 +109,21 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
         </div>
       )}
 
-      {/* Preview & Acknowledge Section */}
+      {/* Preview, Delete & Acknowledge Section */}
       {preview && (
         <div className="mt-4 pt-4 border-t border-ink/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-ink/15 shadow-card">
+            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-ink/15 shadow-card group">
               <img src={preview} alt="Logbook scan preview" className="h-full w-full object-cover" />
+              {/* Delete Overlay Button */}
+              <button
+                onClick={handleRemovePhoto}
+                title="Remove uploaded image"
+                aria-label="Remove image"
+                className="absolute inset-0 bg-ink/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs font-semibold"
+              >
+                ✕ Delete
+              </button>
             </div>
             <div>
               <p className="text-xs font-semibold text-ink">
@@ -119,17 +134,32 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
               <p className="text-[11px] text-ink-faint mt-0.5">
                 Review your scan before adding to your chart.
               </p>
+              <button
+                onClick={handleRemovePhoto}
+                className="text-xs text-red-500 hover:text-red-700 font-medium underline mt-1 block md:hidden"
+              >
+                Remove photo
+              </button>
             </div>
           </div>
 
-          {pendingEntries.length > 0 && (
+          <div className="flex items-center gap-2 w-full md:w-auto">
             <button
-              onClick={handleAcknowledge}
-              className="w-full md:w-auto px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-lift shrink-0"
+              onClick={handleRemovePhoto}
+              className="hidden md:inline-flex px-3 py-2 text-xs font-medium text-ink-soft hover:text-red-600 rounded-xl border border-ink/15 hover:border-red-200 transition-all shrink-0"
             >
-              ✓ Acknowledge &amp; Populate Logbook
+              🗑️ Delete Photo
             </button>
-          )}
+
+            {pendingEntries.length > 0 && (
+              <button
+                onClick={handleAcknowledge}
+                className="flex-1 md:flex-initial px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-lift shrink-0"
+              >
+                ✓ Acknowledge &amp; Populate Logbook
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
