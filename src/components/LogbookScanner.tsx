@@ -23,8 +23,8 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
     <div className="rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-sheet transition-all">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h3 className="font-display text-base font-bold text-ink flex items-center gap-2">
-            📸 Auto-Fill Logbook from Photo
+          <h3 className="font-display text-base font-bold text-ink">
+            Auto-Fill Logbook from Photo
           </h3>
           <p className="text-xs text-ink-soft mt-0.5">
             Snap a handwritten physical logbook page to auto-populate your digital entries.
@@ -40,12 +40,12 @@ export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerPro
         </button>
       </div>
 
-      {/* Immediate Coming Soon Banner */}
+      {/* Clean Coming Soon Banner Without Emojis */}
       {showComingSoon && (
         <div className="mt-4 pt-4 border-t border-ink/10 flex items-center justify-between gap-4 animate-fade-in">
           <div>
-            <p className="text-xs font-semibold text-accent flex items-center gap-1">
-              🚀 AI Scan &amp; Auto-Fill is Coming Soon!
+            <p className="text-xs font-semibold text-accent">
+              AI Scan &amp; Auto-Fill is Coming Soon!
             </p>
             <p className="text-[11px] text-ink-faint mt-0.5">
               We are fine-tuning our vision AI for handwritten logbooks. Stay tuned!
