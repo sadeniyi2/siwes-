@@ -267,7 +267,22 @@ function LogbookInner() {
         <LogbookScanner 
           onEntriesExtracted={(scannedEntries) => {
             console.log("AI Found these entries:", scannedEntries);
-            alert(`Successfully scanned ${scannedEntries.length} entries! Check your console logs to see the data. Next, we can hook this up to auto-save to your logbook.`);
+            if (!scannedEntries || scannedEntries.length === 0) return;
+            let addedCount = 0;
+            for (const entry of scannedEntries) {
+              if (entry.date && entry.description) {
+                saveEntry({
+                  date: entry.date,
+                  day: dayNameFromISO(entry.date),
+                  description: entry.description,
+                  savedAt: new Date().toISOString(),
+                });
+                addedCount++;
+              }
+            }
+            setEntries(loadEntries());
+            pushCloudBackup();
+            alert(`🎉 Magic! Auto-populated ${addedCount} entries straight into your logbook chart.`);
           }} 
         />
       </div>
