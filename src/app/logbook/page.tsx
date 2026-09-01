@@ -1,5 +1,6 @@
 "use client";
 
+import LogbookScanner from "@/components/LogbookScanner";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AccessGate from "@/components/AccessGate";
@@ -235,7 +236,7 @@ function LogbookInner() {
       </div>
 
       {/* Week-dot pager: one dot per internship week, filled by progress */}
-      <div data-tour="weeks" className="mb-4 flex flex-wrap items-center justify-center gap-1.5 print:hidden">
+      <div data-tour="weeks" className="mb-6 flex flex-wrap items-center justify-center gap-1.5 print:hidden">
         {Array.from({ length: totalWeeks }, (_, i) => {
           const start = addDays(firstMonday, i * 7);
           const dates = WORK_DAYS.map((_, d) => addDays(start, d));
@@ -259,6 +260,16 @@ function LogbookInner() {
             />
           );
         })}
+      </div>
+
+      {/* NEW: Logbook AI Scanner */}
+      <div className="mx-auto max-w-3xl mb-6 print:hidden">
+        <LogbookScanner 
+          onEntriesExtracted={(scannedEntries) => {
+            console.log("AI Found these entries:", scannedEntries);
+            alert(`Successfully scanned ${scannedEntries.length} entries! Check your console logs to see the data. Next, we can hook this up to auto-save to your logbook.`);
+          }} 
+        />
       </div>
 
       {/* The sheet — mirrors the physical SIWES logbook page.
@@ -609,7 +620,7 @@ function PrintSheet({
       <div className="mb-8 text-center font-book text-sm tracking-wide">
         SECTION ATTACHED{" "}
         <span className="border-b border-dotted border-ink/60 px-8">
-          {section || "        "}
+          {section || "        "}
         </span>
       </div>
       <table className="w-full border-collapse border-2 border-ink">
@@ -786,7 +797,7 @@ function PrintDialog({
             <div className="mt-1 rounded-xl border border-ink/15 p-3">
               <div className="mb-2 flex items-center justify-between text-xs text-ink-soft">
                 <button
-                  onClick={() => setChosen(new Set(weeks.map((w) => w.num)))}
+                  onClick={() => setChosen(new Set(weeks.map((w) => w.num))))}
                   className="font-medium text-accent hover:underline"
                 >
                   Select all
