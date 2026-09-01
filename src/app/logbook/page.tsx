@@ -797,7 +797,7 @@ function PrintDialog({
             <div className="mt-1 rounded-xl border border-ink/15 p-3">
               <div className="mb-2 flex items-center justify-between text-xs text-ink-soft">
                 <button
-                  onClick={() => setChosen(new Set(weeks.map((w) => w.num))))}
+                  onClick={() => setChosen(new Set(weeks.map((w) => w.num)))}
                   className="font-medium text-accent hover:underline"
                 >
                   Select all
