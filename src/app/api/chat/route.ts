@@ -111,6 +111,38 @@ export async function POST(req: NextRequest) {
     return new Response("Invalid message role", { status: 400 });
   }
 
+  // Bound attached images (base64) so a request can't be huge. ~8MB of base64
+  // across the whole conversation, and at most 6 images.
+  let imageBytes = 0;
+  let imageCount = 0;
+  for (const m of body.messages) {
+    for (const img of m.images ?? []) {
+      imageBytes += img?.data?.length ?? 0;
+      imageCount += 1;
+    }
+  }
+  if (imageCount > 6 || imageBytes > 8_000_000) {
+    return Response.json(
+      {
+        reason: "too_large",
+        message: "Please attach fewer/smaller images (up to 6) and try again.",
+      },
+      { status: 413 },
+    );
+  }
+
+  // Image attachments are a Pro-only feature (covers Basic and Basic trials).
+  if (imageCount > 0 && claims.tier !== "pro") {
+    return Response.json(
+      {
+        reason: "pro_required",
+        message:
+          "Attaching images is a Pro feature. Upgrade to send photos to the assistant.",
+      },
+      { status: 403 },
+    );
+  }
+
   // Tier enforcement: Basic users can't trigger Pro-only actions.
   if (claims.tier === "basic") {
     const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
@@ -129,17 +161,28 @@ export async function POST(req: NextRequest) {
   const todayISO = new Date().toISOString().slice(0, 10);
 
   // Per-request context (saved-entry memory) rides on the first user turn.
-  const contents = body.messages.map((m, i) => ({
-    role: m.role === "assistant" ? ("model" as const) : ("user" as const),
-    parts: [
-      {
-        text:
-          i === 0 && m.role === "user"
-            ? `<internship_memory>\n${body.memory || "No entries saved yet."}\n</internship_memory>\n\n${m.content}`
-            : m.content,
-      },
-    ],
-  }));
+  type Part =
+    | { text: string }
+    | { inlineData: { mimeType: string; data: string } };
+  const contents = body.messages.map((m, i) => {
+    const text =
+      i === 0 && m.role === "user"
+        ? `<internship_memory>\n${body.memory || "No entries saved yet."}\n</internship_memory>\n\n${m.content}`
+        : m.content;
+    const parts: Part[] = [{ text }];
+    // Attach any images on this (user) turn as inline data for the model.
+    if (m.role === "user" && Array.isArray(m.images)) {
+      for (const img of m.images) {
+        if (img?.data && img?.mimeType) {
+          parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+        }
+      }
+    }
+    return {
+      role: m.role === "assistant" ? ("model" as const) : ("user" as const),
+      parts,
+    };
+  });
   if (contents[0]?.role !== "user") {
     contents.unshift({
       role: "user",
