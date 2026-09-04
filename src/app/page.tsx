@@ -658,11 +658,11 @@ function Assistant({ tier }: { tier: Tier }) {
             }}
           />
         )}
-        {!busy && (
+        {tier === "pro" && !busy && (
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            title="Attach an image"
+            title="Attach an image (Pro)"
             aria-label="Attach an image"
             className="btn shrink-0 border border-ink/15 bg-paper-sheet px-3 py-3 text-ink-soft shadow-card hover:border-accent/50 hover:text-accent-dark"
           >

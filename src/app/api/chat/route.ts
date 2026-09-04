@@ -131,6 +131,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Image attachments are a Pro-only feature (covers Basic and Basic trials).
+  if (imageCount > 0 && claims.tier !== "pro") {
+    return Response.json(
+      {
+        reason: "pro_required",
+        message:
+          "Attaching images is a Pro feature. Upgrade to send photos to the assistant.",
+      },
+      { status: 403 },
+    );
+  }
+
   // Tier enforcement: Basic users can't trigger Pro-only actions.
   if (claims.tier === "basic") {
     const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
