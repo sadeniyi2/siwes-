@@ -33,7 +33,8 @@ import {
   saveChat,
   saveEntry,
 } from "@/lib/store";
-import { ChatMessage, formatLongDate, weekNumberOf } from "@/lib/types";
+import { ChatImage, ChatMessage, formatLongDate, weekNumberOf } from "@/lib/types";
+import { compressImage } from "@/lib/image";
 import {
   DEFENSE_SLIDES_BLUEPRINT,
   FINAL_REPORT_BLUEPRINT,
@@ -123,9 +124,16 @@ function Assistant({ tier }: { tier: Tier }) {
   const [onTrial, setOnTrial] = useState(false);
   const [countdown, setCountdown] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
+  // Images attached to the NEXT message. `url` is a data URL for the preview;
+  // `mimeType`/`data` are what we send to Gemini (base64, no prefix).
+  const [attachments, setAttachments] = useState<
+    { url: string; mimeType: string; data: string }[]
+  >([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Refs let the message callbacks stay referentially stable, so the (memoized)
   // chat messages don't re-render on every keystroke in the composer.
@@ -200,9 +208,38 @@ function Assistant({ tier }: { tier: Tier }) {
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, []);
 
+  // Compress and attach picked image files (up to 6 total).
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setAttachError(null);
+    const room = 6 - attachments.length;
+    const picked = Array.from(files).slice(0, Math.max(0, room));
+    if (picked.length === 0) {
+      setAttachError("You can attach up to 6 images.");
+      return;
+    }
+    const added: { url: string; mimeType: string; data: string }[] = [];
+    for (const file of picked) {
+      try {
+        const url = await compressImage(file, 1280, 0.7); // data:image/jpeg;base64,…
+        const comma = url.indexOf(",");
+        const mimeType = url.slice(5, url.indexOf(";")) || "image/jpeg";
+        added.push({ url, mimeType, data: url.slice(comma + 1) });
+      } catch (e) {
+        setAttachError(e instanceof Error ? e.message : "Couldn't add that image.");
+      }
+    }
+    if (added.length) setAttachments((prev) => [...prev, ...added]);
+  }
+
   async function send(text: string, augment?: string) {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    // Images captured for THIS message; allow sending an image with no text.
+    const imgs: ChatImage[] = attachments.map((a) => ({
+      mimeType: a.mimeType,
+      data: a.data,
+    }));
+    if ((!trimmed && imgs.length === 0) || busy) return;
 
     // Trial expired? Send them to unlock instead of generating.
     if (isTrial() && trialExpired()) {
@@ -212,23 +249,32 @@ function Assistant({ tier }: { tier: Tier }) {
     }
 
     setInput("");
+    setAttachments([]);
+    setAttachError(null);
     requestAnimationFrame(autoGrow);
     setLastUserText(trimmed);
     setBusy(true);
 
+    // A default instruction for image-only turns, so the model has direction.
+    const sendContent =
+      trimmed || "Please look at the attached image(s) and help me with my SIWES logbook.";
+
     const history: ChatMessage[] = [
       ...messages,
-      { role: "user", content: trimmed },
+      { role: "user", content: trimmed, images: imgs.length ? imgs : undefined },
       { role: "assistant", content: "" },
     ];
     setMessages(history);
 
     // What we SEND to the model: same conversation, but the last user turn may
-    // carry an extra instruction (e.g. the report/slides blueprint) that we
-    // don't want cluttering the visible chat bubble.
-    const sentMessages: ChatMessage[] = augment
-      ? [...messages, { role: "user", content: `${trimmed}\n\n${augment}` }]
-      : history.slice(0, -1);
+    // carry an extra instruction (e.g. the report/slides blueprint) plus any
+    // attached images. The extra instruction never clutters the visible bubble.
+    const sentUser: ChatMessage = {
+      role: "user",
+      content: augment ? `${sendContent}\n\n${augment}` : sendContent,
+      images: imgs.length ? imgs : undefined,
+    };
+    const sentMessages: ChatMessage[] = [...messages, sentUser];
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -315,7 +361,9 @@ function Assistant({ tier }: { tier: Tier }) {
         { role: "assistant", content: acc },
       ];
       setMessages(finalMessages);
-      saveChat(finalMessages);
+      // Don't persist image bytes in the saved chat (keeps localStorage / cloud
+      // sync small) — they stay visible for the current session only.
+      saveChat(finalMessages.map((m) => ({ role: m.role, content: m.content })));
     } catch (err) {
       const msg =
         err instanceof Error && err.name !== "AbortError"
@@ -488,8 +536,21 @@ function Assistant({ tier }: { tier: Tier }) {
           const isLast = i === messages.length - 1;
           return m.role === "user" ? (
             <div key={i} className="animate-rise flex justify-end">
-              <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-gradient-to-br from-accent to-accent-dark px-4 py-2.5 text-sm text-white shadow-lift">
-                {m.content}
+              <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-gradient-to-br from-accent to-accent-dark px-4 py-2.5 text-sm text-white shadow-lift">
+                {m.images && m.images.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {m.images.map((img, k) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={k}
+                        src={`data:${img.mimeType};base64,${img.data}`}
+                        alt={`Attached ${k + 1}`}
+                        className="h-24 w-24 rounded-lg object-cover"
+                      />
+                    ))}
+                  </div>
+                )}
+                {m.content && <p className="whitespace-pre-wrap">{m.content}</p>}
               </div>
             </div>
           ) : (
@@ -523,13 +584,53 @@ function Assistant({ tier }: { tier: Tier }) {
         <div ref={bottomRef} />
       </div>
 
-      <form
-        className="mt-3 flex items-end gap-2 pb-[env(safe-area-inset-bottom)]"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-      >
+      <div className="mt-3 pb-[env(safe-area-inset-bottom)]">
+        {(attachments.length > 0 || attachError) && (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {attachments.map((a, i) => (
+              <div
+                key={i}
+                className="relative h-16 w-16 overflow-hidden rounded-xl border border-ink/15 shadow-card"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={a.url}
+                  alt={`Attachment ${i + 1}`}
+                  className="h-full w-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAttachments((prev) => prev.filter((_, j) => j !== i))
+                  }
+                  className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-xs leading-none text-white hover:bg-ink"
+                  aria-label="Remove image"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {attachError && <span className="text-xs text-margin">{attachError}</span>}
+          </div>
+        )}
+        <form
+          className="flex items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(input);
+          }}
+        >
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            handleFiles(e.target.files);
+            e.target.value = ""; // allow re-picking the same file
+          }}
+        />
         <textarea
           data-tour="composer"
           ref={textareaRef}
@@ -557,6 +658,35 @@ function Assistant({ tier }: { tier: Tier }) {
             }}
           />
         )}
+        {!busy && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            title="Attach an image"
+            aria-label="Attach an image"
+            className="btn shrink-0 border border-ink/15 bg-paper-sheet px-3 py-3 text-ink-soft shadow-card hover:border-accent/50 hover:text-accent-dark"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden>
+              <rect
+                x="3"
+                y="4"
+                width="18"
+                height="16"
+                rx="2.5"
+                stroke="currentColor"
+                strokeWidth="1.7"
+              />
+              <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+              <path
+                d="M4.5 18l4.5-5 3.5 4 3-3 4 4"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
         {busy ? (
           <button
             type="button"
@@ -569,7 +699,7 @@ function Assistant({ tier }: { tier: Tier }) {
         ) : (
           <button
             type="submit"
-            disabled={!input.trim()}
+            disabled={!input.trim() && attachments.length === 0}
             className="btn-primary group shrink-0 px-4 disabled:opacity-50 disabled:hover:shadow-none sm:px-5"
           >
             <span className="hidden sm:inline">Send </span>
@@ -578,7 +708,8 @@ function Assistant({ tier }: { tier: Tier }) {
             </span>
           </button>
         )}
-      </form>
+        </form>
+      </div>
     </div>
   );
 }

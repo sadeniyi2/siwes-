@@ -35,9 +35,18 @@ export interface LogEntry {
   savedAt: string;
 }
 
+export interface ChatImage {
+  /** MIME type, e.g. "image/jpeg". */
+  mimeType: string;
+  /** Base64-encoded image bytes, WITHOUT the "data:...;base64," prefix. */
+  data: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  /** Optional images the student attached to this (user) turn. */
+  images?: ChatImage[];
 }
 
 export interface ChatRequestBody {
