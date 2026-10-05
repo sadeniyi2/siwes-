@@ -3,44 +3,88 @@
 // appended to the request (not shown in the chat bubble) when the Pro user taps
 // "Build Final Report" or "Build Defense Slides".
 
-export const FINAL_REPORT_BLUEPRINT = `You are writing the student's COMPLETE Final SIWES Report following the official NACOS Report Master-Guide. Use the student's profile and every saved logbook entry in the internship memory as the source of truth — write about what THEY actually did, focused on application, not textbook theory. Never invent a company; use the profile's firm details.
+export const FINAL_REPORT_BLUEPRINT = `You are writing the student's COMPLETE Final SIWES Technical Report. Use the student's profile and EVERY saved logbook entry in the internship memory as the source of truth — write about what THEY actually did. Never invent a company; use the profile's firm. Pull these real values from the profile and use them everywhere (never leave a placeholder for data you already have): FULL NAME, MATRIC NUMBER, FIRM/COMPANY, the student's DEPARTMENT/SECTION at the firm, INSTITUTION (their university), COURSE (their discipline), and the training START and END dates.
 
-WRITE IT IN A HUMAN VOICE (very important — an AI-sounding report gets flagged):
-- Write the work chapters (Chapters 4 and 5) in the FIRST PERSON, using the student's own saved entries and raw notes — their real tasks, tools and phrasing. It should sound like the same person who was chatting with you.
-- Vary sentence length, keep the language plain, and follow the "sound like the real student" writing rules (no delve/leverage/utilize/robust/comprehensive/seamless/pivotal/"in conclusion"/"it is worth noting", etc.).
-- Don't pad with textbook definitions; every point should tie to what the student actually did.
-- Insert a FEW short bracketed prompts (3–6 across the whole report) where a personal touch would help, e.g. "[Add one specific thing your supervisor taught you here]" or "[Name the exact project you worked on]" — so the student adds their own real detail. Use them sparingly, only where it genuinely helps.
+WRITE IT IN A HUMAN VOICE (critical — an AI-sounding report gets flagged):
+- Write the work chapters (4 and 5) in the FIRST PERSON from the student's real saved entries, tools and phrasing — it should read like the same person who chatted with you.
+- Vary sentence length, keep language plain, and follow the "sound like the real student" rules (no delve/leverage/utilize/robust/comprehensive/seamless/pivotal/"in conclusion"/"it is worth noting", etc.).
+- No textbook padding — every point ties to what the student actually did.
+- Use only a FEW short bracketed prompts (3–6 in the WHOLE report) where a personal detail genuinely helps, e.g. "[Add the exact project name here]". Never bracket data already in the profile.
 
-Produce the whole report in this exact order, using Markdown headings (# for chapter titles, ## for sub-sections):
+Output the whole report as Markdown in EXACTLY this order and structure. Use "# " for each TOP-LEVEL page/chapter title (each starts on a new page) and "## " / "### " for sub-sections.
 
-PRELIMINARY PAGES (before Chapter 1):
-- TITLE PAGE: "A TECHNICAL REPORT ON STUDENT INDUSTRIAL WORK EXPERIENCE SCHEME (SIWES) TRAINING PROGRAMME", the training dates, "UNDERTAKEN AT <firm>", "WRITTEN BY <full name> <matric number>", "SUBMITTED TO THE DEPARTMENT OF <course/department>", the institution, and the month/year — one item per line, centered feel.
-- DEDICATION: brief (God, parents, family).
-- ACKNOWLEDGEMENTS: thank the industry supervisor, the Head of Programme, the Coordinator and lecturers, and family.
-- TABLE OF CONTENTS: list every chapter and sub-section below.
-- LIST OF FIGURES: list the figures you reference (e.g. "Figure 1: Company logo", "Figure 2: Organisational chart", plus screenshots of the work).
-- ABSTRACT: one paragraph — where they worked, the tools used, and what they built/learned.
+# COVER PAGE
+Write each of these as its own centered line (bold), filled from the profile:
+A TECHNICAL REPORT ON
+STUDENT INDUSTRIAL WORK EXPERIENCE SCHEME (SIWES) TRAINING PROGRAMME
+(<START DATE> TO <END DATE>) UNDERTAKEN AT
+<FIRM> (<DEPARTMENT/SECTION>)
+BY
+<FULL NAME>
+MATRIC NO: <MATRIC NUMBER>
+SUBMITTED TO
+THE DEPARTMENT OF <COURSE>, <appropriate faculty — e.g. FACULTY OF SCIENCE for a science course>
+<INSTITUTION>
+IN PARTIAL FULFILMENT OF THE REQUIREMENTS FOR THE AWARD OF THE DEGREE OF <degree, e.g. BACHELOR OF SCIENCE (B.Sc. HONS)> IN <COURSE>
+<MONTH, YEAR of the end date>
+Then add a figure line: ![Figure: Institution / company logo](figure)
 
-CHAPTER 1: INDUSTRIAL TRAINING FUND (I.T.F) — keep brief:
-1.0 Introduction to ITF; 1.1 Aims and Objectives of SIWES; 1.2 Roles of the ITF; 1.3 Roles of Students and Institutions; 1.4 Significance of SIWES (how it bridges classroom and industry).
+# DEDICATION
+Short, warm, first person (God, parents, family).
 
-CHAPTER 2: THE COMPANY:
-2.0 History and Location (what the firm does); 2.1 Mission and Vision / Core Values; 2.2 Organisational Structure — describe the administrative breakdown from the CEO down to the student's department, and note "(Figure: Organisational chart)".
+# ACKNOWLEDGEMENTS
+Thank the industry/company supervisor (use their name if in the profile), the Head of Department/Programme, the SIWES coordinator and lecturers, colleagues at the firm, and family.
 
-CHAPTER 3: TOOLS AND METHODOLOGIES:
-3.0 Tools Used — the software/hardware/frameworks the student actually used (from the logbook); 3.1 Methodologies — how the company operates (e.g. Agile, stand-ups, ticketing, API integration).
+# ABSTRACT
+One tight paragraph: where they interned, the department, the main tools, and what they built/learned.
 
-CHAPTER 4: WORK DONE AND EXPERIENCE ACQUIRED:
-4.0 Experience Acquired (high-level summary); 4.1 Detailed Description of Work Done — expand each real task with an application focus (e.g. "I used Python tuples to store immutable POS transaction data, preventing accidental overwriting"), grouped by tool/skill; 4.2 Screenshots and Visuals — note where each labelled figure goes (e.g. "Figure: Python script for data cleaning").
+# TABLE OF CONTENTS
+List every section that follows with its title (Dedication, Acknowledgements, Abstract, Chapters 1–5 and their sub-sections, Appendix, References). Keep it simple — one per line.
 
-CHAPTER 5: CONCLUSION AND RECOMMENDATIONS:
-5.0 Conclusion (how the placement improved their skills); 5.1 Challenges Encountered (1–2, honest but professional); 5.2 Recommendations (at least 3, to the ITF, the company and the institution); 5.3 References (properly cited — include the ITF website https://www.itf.gov.ng/programmes/siwes, the company's website, and any docs/websites used).
+# CHAPTER 1: INDUSTRIAL TRAINING FUND (I.T.F)
+## 1.0 Introduction to the ITF
+## 1.1 Aims and Objectives of SIWES
+## 1.2 Roles of the ITF
+## 1.3 Roles of Students
+## 1.4 Roles of Institutions
+## 1.5 Significance of SIWES (how it bridges classroom and industry)
+Keep this chapter concise and factual.
 
-APPENDIX: note where clear pictures of the projects/work go.
+# CHAPTER 2: THE COMPANY
+## 2.0 History and Location (what <FIRM> does, where it is)
+## 2.1 Mission, Vision and Core Values
+## 2.2 Organisational Structure — describe the breakdown from the top down to the student's department. End with: ![Figure 2.1: Organisational structure of <FIRM>, showing where I was placed](figure)
 
-Formatting reminder for the student (state this once at the very top as a short note): "Paste into Microsoft Word using Times New Roman size 12, 1.5 line spacing, justified text; chapter headings bold, size 14, ALL CAPS, centered; number preliminary pages i, ii, iii and start 1, 2, 3 from Chapter 1."
+# CHAPTER 3: TOOLS AND METHODOLOGIES
+## 3.0 Tools and Technologies Used — the actual software/hardware/frameworks/languages from the logbook, each with one line on what it was used for.
+## 3.1 Engineering Methodologies — how the team actually works (e.g. Agile, stand-ups, ticketing, version control, code review, API integration) as the student experienced it.
 
-Write full, defense-ready paragraphs — this is the complete report, not an outline.`;
+# CHAPTER 4: WORK DONE AND EXPERIENCE ACQUIRED
+## 4.0 Overview of Experience Acquired
+## 4.1 Weekly Summary of Work Done
+Build a Markdown table summarising the placement week by week, from the student's real entries. Use EXACTLY these columns:
+| Week | Dates | Primary Core Activities & Tasks Completed | Core Tools Used | Output / Deliverable |
+One row per week that has entries. Keep each cell concise.
+## 4.2 Detailed Description of Work Done — expand the main tasks in the first person with an APPLICATION focus (e.g. "I used Python tuples to store immutable POS transaction records so they couldn't be overwritten"), grouped by tool/skill/project. Where a screenshot belongs, add a figure line like: ![Figure 4.x: <what the screenshot shows>](figure)
+## 4.3 Skills and Competencies Gained
+
+# CHAPTER 5: CONCLUSION AND RECOMMENDATIONS
+## 5.0 Conclusion (how the placement improved their skills)
+## 5.1 Challenges Encountered (1–2, honest but professional)
+## 5.2 Recommendations (at least 3 — to the ITF, the company, and the institution)
+
+# APPENDIX: TECHNICAL VISUALS
+A short intro line, then a captioned figure line for each key visual the student should attach, numbered Figure A.1, A.2, … e.g.:
+![Figure A.1: <diagram/screenshot of a real thing they built>](figure)
+Base the captions on the student's actual work (architectures, dashboards, code, network setups). 3–6 figures.
+
+# REFERENCES
+This is the LAST page. List proper references used, including the ITF SIWES page (https://www.itf.gov.ng/programmes/siwes), the company's official website, and any documentation/tools/websites referenced in the report. Number them.
+
+RULES:
+- Every figure MUST use the Markdown image form on its own line: ![Figure N: caption](figure) — the download turns these into labelled picture slots the student drops their screenshot into, and auto-inserts any photos they attached to their logbook entries.
+- Start the whole output with ONE short note on its own line: "Tip: tap Download as Word for the formatted report (Times New Roman 12, 1.5 spacing, each chapter and the references on their own page). Replace every [bracket] and figure slot with your real detail before printing."
+- Write full, defense-ready paragraphs. This is the complete report, not an outline.`;
 
 export const DEFENSE_SLIDES_BLUEPRINT = `Build the student's SIWES DEFENSE SLIDE DECK following the official NACOS Defense Slide template. Use the student's profile and saved logbook entries — showcase what they actually did.
 

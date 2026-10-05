@@ -39,15 +39,41 @@ function inlineRuns(TextRun: any, text: string): any[] {
   return runs.length ? runs : [new TextRun({ text: "" })];
 }
 
+/** A real image the student attached, to drop into the report's figure slots. */
+export interface ReportPhoto {
+  /** data: URL (jpeg/png) */
+  src: string;
+  caption?: string;
+}
+
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const b64 = dataUrl.split(",")[1] ?? "";
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function imageType(dataUrl: string): "jpg" | "png" | "gif" | "bmp" {
+  const m = /^data:image\/(\w+)/.exec(dataUrl);
+  const t = (m?.[1] || "").toLowerCase();
+  if (t === "png") return "png";
+  if (t === "gif") return "gif";
+  if (t === "bmp") return "bmp";
+  return "jpg";
+}
+
 export async function exportMarkdownDocx(
   markdown: string,
   fileBase = "siwes-document",
+  photos: ReportPhoto[] = [],
 ): Promise<void> {
   const d = await import("docx");
   const {
     AlignmentType,
     Document,
     HeadingLevel,
+    ImageRun,
     Packer,
     Paragraph,
     Table,
@@ -56,6 +82,39 @@ export async function exportMarkdownDocx(
     TextRun,
     WidthType,
   } = d;
+
+  // An image placeholder slot (when there's no real picture to drop in yet).
+  const captionPara = (text: string) =>
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 120, after: 40 },
+      children: [new TextRun({ text, italics: true, bold: true })],
+    });
+  const slotPara = () =>
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 120 },
+      children: [
+        new TextRun({ text: "[ insert your image here ]", italics: true, color: "888888" }),
+      ],
+    });
+  const imagePara = (src: string) => {
+    try {
+      return new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 120 },
+        children: [
+          new ImageRun({
+            type: imageType(src),
+            data: dataUrlToBytes(src),
+            transformation: { width: 420, height: 300 },
+          }),
+        ],
+      });
+    } catch {
+      return slotPara();
+    }
+  };
 
   const lines = stripTags(markdown).split(/\r?\n/);
   const children: any[] = [];
@@ -68,6 +127,29 @@ export async function exportMarkdownDocx(
 
   let i = 0;
   let inFence = false;
+  let inCover = false; // centre the cover page block
+  let seenTopHeading = false; // first top-level heading gets no page break
+  let photosInserted = false;
+
+  // Build the "photos from my logbook" appendix (their real attached images),
+  // placed just before References so References stays the last page.
+  const pushPhotoAppendix = () => {
+    if (photosInserted || photos.length === 0) return;
+    photosInserted = true;
+    children.push(
+      new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        pageBreakBefore: true,
+        spacing: { before: 160, after: 60 },
+        children: [new TextRun({ text: "APPENDIX: PHOTOS FROM MY LOGBOOK", bold: true })],
+      }),
+    );
+    photos.forEach((p, n) => {
+      children.push(imagePara(p.src));
+      children.push(captionPara(p.caption || `Figure B.${n + 1}`));
+    });
+  };
+
   while (i < lines.length) {
     const raw = lines[i];
     const line = raw.trimEnd();
@@ -109,13 +191,57 @@ export async function exportMarkdownDocx(
     // Heading
     const h = line.match(/^(#{1,4})\s+(.*)$/);
     if (h) {
+      const level = h[1].length;
+      const text = h[2].replace(/\*\*/g, "").trim();
+      if (level === 1) {
+        const upper = text.toUpperCase();
+        // The cover page is centred and shows no literal "COVER PAGE" title.
+        if (/^COVER PAGE$/.test(upper)) {
+          inCover = true;
+          seenTopHeading = true;
+          i++;
+          continue;
+        }
+        inCover = false;
+        // The student's real photos go in just before References → References
+        // remains the final page.
+        if (/^REFERENCES\b/.test(upper)) pushPhotoAppendix();
+        children.push(
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            alignment: AlignmentType.CENTER,
+            pageBreakBefore: seenTopHeading, // every chapter/section on a new page
+            spacing: { before: 160, after: 120 },
+            children: [new TextRun({ text: upper, bold: true })],
+          }),
+        );
+        seenTopHeading = true;
+        i++;
+        continue;
+      }
       children.push(
         new Paragraph({
-          heading: HEADINGS[h[1].length - 1],
+          heading: HEADINGS[level - 1],
           spacing: { before: 160, after: 60 },
-          children: inlineRuns(TextRun, h[2]),
+          children: inlineRuns(TextRun, text),
         }),
       );
+      i++;
+      continue;
+    }
+
+    // Image / figure line: ![caption](src)
+    const img = line.match(/^!\[([^\]]*)\]\(([^)]*)\)\s*$/);
+    if (img) {
+      const caption = img[1].trim();
+      const src = img[2].trim();
+      if (/^data:image\//.test(src)) {
+        children.push(imagePara(src));
+        if (caption) children.push(captionPara(caption));
+      } else {
+        if (caption) children.push(captionPara(caption));
+        children.push(slotPara());
+      }
       i++;
       continue;
     }
@@ -199,15 +325,21 @@ export async function exportMarkdownDocx(
       continue;
     }
 
-    // Plain paragraph
+    // Plain paragraph (centred + bold while on the cover page)
     children.push(
       new Paragraph({
-        spacing: { after: 100 },
-        children: inlineRuns(TextRun, line.trim()),
+        alignment: inCover ? AlignmentType.CENTER : undefined,
+        spacing: { after: inCover ? 40 : 100 },
+        children: inCover
+          ? [new TextRun({ text: line.trim().replace(/\*\*/g, ""), bold: true })]
+          : inlineRuns(TextRun, line.trim()),
       }),
     );
     i++;
   }
+
+  // If the model never wrote a References heading, still add the photo appendix.
+  pushPhotoAppendix();
 
   const doc = new Document({
     numbering: {
