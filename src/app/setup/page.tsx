@@ -14,6 +14,8 @@ const EMPTY: Profile = {
   email: "",
   institution: "",
   course: "",
+  degree: "",
+  faculty: "",
   firmName: "",
   firmAddress: "",
   department: "",
@@ -221,6 +223,22 @@ export default function SetupPage() {
               value={p.course}
               onChange={(e) => set("course", e.target.value)}
               placeholder="e.g. Computer Science"
+            />
+          </Field>
+          <Field label="Degree">
+            <input
+              className={inputCls}
+              value={p.degree}
+              onChange={(e) => set("degree", e.target.value)}
+              placeholder="e.g. Bachelor of Science (B.Sc. Hons)"
+            />
+          </Field>
+          <Field label="Faculty">
+            <input
+              className={inputCls}
+              value={p.faculty}
+              onChange={(e) => set("faculty", e.target.value)}
+              placeholder="e.g. Faculty of Science"
             />
           </Field>
         </div>

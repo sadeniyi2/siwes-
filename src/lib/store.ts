@@ -1,6 +1,6 @@
 "use client";
 
-import { ChatMessage, LogEntry, Profile, formatLongDate } from "./types";
+import { ChatMessage, LogEntry, Profile, addDays, formatLongDate } from "./types";
 
 const ENTRIES_KEY = "siwes.entries.v1";
 const CHAT_KEY = "siwes.chat.v1";
@@ -100,11 +100,15 @@ export function buildMemory(): string {
       p.matricNumber && `Matric/Reg number: ${p.matricNumber}`,
       p.institution && `Institution: ${p.institution}`,
       p.course && `Course of study: ${p.course}`,
+      p.degree && `Degree: ${p.degree}`,
+      p.faculty && `Faculty: ${p.faculty}`,
       `Firm/Organization: ${p.firmName}`,
       p.firmAddress && `Firm address: ${p.firmAddress}`,
       p.department && `Department/Section attached: ${p.department}`,
       p.supervisorName && `Industry supervisor: ${p.supervisorName}`,
       `Internship start date: ${p.startDate} (${formatLongDate(p.startDate)})`,
+      p.durationWeeks &&
+        `Internship end date (approx): ${formatLongDate(addDays(p.startDate, p.durationWeeks * 7 - 2))}`,
       p.durationWeeks && `Planned duration: ${p.durationWeeks} weeks`,
       `Work days: Monday–${p.worksSaturday ? "Saturday" : "Friday"}`,
     ].filter(Boolean);

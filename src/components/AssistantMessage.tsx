@@ -4,7 +4,8 @@ import { memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Mermaid from "./Mermaid";
-import { wordCount } from "@/lib/types";
+import { formatLongDate, wordCount } from "@/lib/types";
+import { loadEntries, loadProfile } from "@/lib/store";
 import { exportMarkdownDocx, looksLikeDocument } from "@/lib/reportDocx";
 import { exportSlidesPptx, looksLikeSlides } from "@/lib/slidesPptx";
 
@@ -109,7 +110,20 @@ function AssistantMessage({
   async function downloadWord() {
     setSaving(true);
     try {
-      await exportMarkdownDocx(content, inferFileBase(content));
+      const profile = loadProfile();
+      // Real photos the student attached to entries → dropped into the report.
+      const photos = loadEntries()
+        .flatMap((e) =>
+          (e.photos ?? []).map((src) => ({
+            src,
+            caption: `Figure — work on ${formatLongDate(e.date)}`,
+          })),
+        )
+        .slice(0, 12);
+      const base = profile?.fullName
+        ? `siwes-report-${profile.fullName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`
+        : inferFileBase(content);
+      await exportMarkdownDocx(content, base, photos);
     } catch {
       /* ignore */
     } finally {
