@@ -7,6 +7,10 @@ export interface Profile {
   email?: string;
   institution?: string;
   course?: string;
+  /** Degree being pursued, e.g. "Bachelor of Science (B.Sc. Hons)". */
+  degree?: string;
+  /** Academic faculty, e.g. "Faculty of Science". */
+  faculty?: string;
   firmName: string;
   firmAddress?: string;
   department?: string;
