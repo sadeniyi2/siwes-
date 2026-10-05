@@ -88,12 +88,21 @@ async function extractWithKey(
 }
 
 export async function POST(req: NextRequest) {
-  // Require a valid access token (same paywall as the chat).
+  // Require a valid access token, and gate the scanner to Pro.
   const claims = verifyAccess(req.headers.get("x-access-token"));
   if (!claims) {
     return Response.json(
       { error: "Your access could not be verified. Please sign in again." },
       { status: 402 },
+    );
+  }
+  if (claims.tier !== "pro") {
+    return Response.json(
+      {
+        error:
+          "Scanning handwritten pages is a Pro feature. Upgrade to auto-fill your logbook from a photo.",
+      },
+      { status: 403 },
     );
   }
 
