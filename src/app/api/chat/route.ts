@@ -213,7 +213,9 @@ export async function POST(req: NextRequest) {
 
   const genConfig = {
     systemInstruction: buildSystemPrompt(todayISO),
-    maxOutputTokens: 32768,
+    // Flash models cap output at 8192 tokens per call; long docs (the final
+    // report) are completed across several calls via continuation below.
+    maxOutputTokens: 8192,
     temperature: 0.6,
   };
 
@@ -223,6 +225,9 @@ export async function POST(req: NextRequest) {
   let stream:
     | Awaited<ReturnType<GoogleGenAI["models"]["generateContentStream"]>>
     | null = null;
+  // The key/model that actually worked — reused to CONTINUE a long generation.
+  let workingAi: GoogleGenAI | null = null;
+  let workingModel = "";
   const tried: number[] = [];
   let envTried = false;
   let lastErr: { status: number; reason: string; message: string } | null = null;
@@ -266,6 +271,8 @@ export async function POST(req: NextRequest) {
               contents,
               config: genConfig,
             });
+            workingAi = ai;
+            workingModel = model;
             modelErr = null;
             break;
           } catch (e) {
@@ -321,19 +328,89 @@ export async function POST(req: NextRequest) {
   }
 
   const encoder = new TextEncoder();
+  const MAX_ROUNDS = 6; // continue a long document across up to 6 calls
+
+  // Open a continuation: feed back what's written so far and ask the model to
+  // keep going. "In your own words" also helps escape RECITATION cut-offs.
+  async function continueStream(produced: string) {
+    const contPrompt =
+      "Continue the response from exactly where you stopped. Do NOT repeat anything already written — pick up mid-sentence if needed and keep going until the whole document is complete. Write entirely in your own words.";
+    const contContents = [
+      ...contents,
+      { role: "model" as const, parts: [{ text: produced }] },
+      { role: "user" as const, parts: [{ text: contPrompt }] },
+    ];
+    for (let r = 0; r < 2; r++) {
+      try {
+        return await workingAi!.models.generateContentStream({
+          model: workingModel,
+          contents: contContents,
+          config: genConfig,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (isOverload(msg) && r === 0) {
+          await sleep(700);
+          continue;
+        }
+        return null;
+      }
+    }
+    return null;
+  }
+
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
-      try {
-        for await (const chunk of stream) {
-          const text = chunk.text;
-          if (text) controller.enqueue(encoder.encode(text));
+      let produced = "";
+      let current: typeof stream | null = stream;
+      for (let round = 0; round < MAX_ROUNDS && current; round++) {
+        const before = produced.length;
+        let finishReason = "";
+        let threw = false;
+        try {
+          for await (const chunk of current) {
+            const text = chunk.text;
+            if (text) {
+              produced += text;
+              controller.enqueue(encoder.encode(text));
+            }
+            const fr = chunk.candidates?.[0]?.finishReason;
+            if (fr) finishReason = String(fr);
+          }
+        } catch {
+          threw = true;
         }
-      } catch (err) {
-        const raw = err instanceof Error ? err.message : String(err);
-        controller.enqueue(encoder.encode(`\n\n⚠️ ${friendlyMessage(raw)}`));
-      } finally {
-        controller.close();
+
+        // Nothing at all came back and it errored → show a friendly message.
+        if (threw && produced.length === 0) {
+          controller.enqueue(
+            encoder.encode(
+              "⚠️ The AI is busy right now. Please try again in a moment.",
+            ),
+          );
+          break;
+        }
+
+        // Was the answer cut short? (hit the per-call token cap, a recitation
+        // trip, or a mid-stream drop after we already had content.)
+        const cutShort =
+          finishReason === "MAX_TOKENS" ||
+          finishReason === "RECITATION" ||
+          finishReason === "OTHER" ||
+          (threw && produced.length > 0);
+
+        // Finished naturally, hit the round cap, or made no progress → stop.
+        if (
+          !cutShort ||
+          round === MAX_ROUNDS - 1 ||
+          produced.length === before
+        ) {
+          break;
+        }
+
+        current = await continueStream(produced);
       }
+      controller.close();
     },
   });
 
