@@ -659,45 +659,44 @@ export interface AiKeyRecord {
   exhaustedAt: number;
 }
 
-/** Is at least one usable owner key available (pool or env)? */
+/** Is at least one usable owner key available (pool or env)?
+ *  Reads the whole row (like the panel) and filters in code, so a table that's
+ *  missing optional columns (enabled/status/last_used) can't make this error. */
 export async function hasServerKey(): Promise<boolean> {
   if (process.env.GEMINI_API_KEY) return true;
   if (!kvConfigured()) return false;
   try {
-    // Treat a NULL `enabled` the same as true — matches how the founder panel
-    // displays keys, so a key that looks on there is also usable here.
-    const r = await sb(
-      `${AI_KEYS}?select=id&or=(enabled.eq.true,enabled.is.null)&limit=1`,
-      { method: "GET" },
-    );
+    const r = await sb(`${AI_KEYS}?select=*&limit=200`, { method: "GET" });
     if (!r.ok) return false;
     const rows = (await r.json()) as AiKeyRow[];
-    return rows.length > 0;
+    // A NULL/absent `enabled` counts as enabled (matches the panel).
+    return rows.some((row) => !!row.key && row.enabled !== false);
   } catch {
     return false;
   }
 }
 
-/** Pick the next healthy pool key not already tried this request. */
+/** Pick the next healthy pool key not already tried this request. Fetches all
+ *  keys and filters/sorts in code — robust to a table missing optional columns. */
 export async function pickAiKey(
   excludeIds: number[] = [],
 ): Promise<{ id: number; key: string; uses: number } | null> {
   if (!kvConfigured()) return null;
   try {
     const now = Date.now();
-    const r = await sb(
-      `${AI_KEYS}?select=*&or=(enabled.eq.true,enabled.is.null)&order=last_used.asc.nullsfirst&limit=50`,
-      { method: "GET" },
-    );
+    const r = await sb(`${AI_KEYS}?select=*&limit=200`, { method: "GET" });
     if (!r.ok) return null;
     const rows = (await r.json()) as AiKeyRow[];
-    for (const row of rows) {
-      if (excludeIds.includes(row.id) || !row.key) continue;
+    const usable = rows
+      .filter((row) => !!row.key && row.enabled !== false)
+      .sort((a, b) => (a.last_used ?? 0) - (b.last_used ?? 0)); // least-recently-used first
+    for (const row of usable) {
+      if (excludeIds.includes(row.id)) continue;
       const healthy =
         row.status === "healthy" ||
         row.status == null ||
         (row.status === "exhausted" && (row.exhausted_at ?? 0) < now - KEY_COOLDOWN);
-      if (healthy) return { id: row.id, key: row.key, uses: row.uses ?? 0 };
+      if (healthy) return { id: row.id, key: row.key as string, uses: row.uses ?? 0 };
     }
     return null;
   } catch {
