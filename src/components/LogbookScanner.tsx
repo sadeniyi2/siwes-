@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { compressImage } from "@/lib/image";
+import { clientId, loadAccessToken } from "@/lib/access";
 
 export interface LogbookEntryExtracted {
   date: string;
@@ -13,53 +15,127 @@ interface LogbookScannerProps {
 }
 
 export default function LogbookScanner({ onEntriesExtracted }: LogbookScannerProps) {
-  const [showComingSoon, setShowComingSoon] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleClick = () => {
-    setShowComingSoon(true);
-  };
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    let dataUrl: string;
+    try {
+      // Larger + higher quality than usual so handwriting stays legible.
+      dataUrl = await compressImage(file, 1600, 0.85);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't read that image.");
+      return;
+    }
+    setPreview(dataUrl);
+    setBusy(true);
+    try {
+      const mimeType = dataUrl.slice(5, dataUrl.indexOf(";")) || "image/jpeg";
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-access-token": loadAccessToken(),
+          "x-client-id": clientId(),
+        },
+        body: JSON.stringify({ imageBase64: dataUrl, mimeType }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.success) {
+        setError(j.error || "Couldn't scan that page. Please try again.");
+        return;
+      }
+      const entries = (j.entries ?? []) as LogbookEntryExtracted[];
+      if (entries.length === 0) {
+        setError(
+          "No entries were found. Make sure the whole chart is in frame, well-lit and straight-on.",
+        );
+        return;
+      }
+      onEntriesExtracted?.(entries);
+      setPreview(null); // done — clear for the next page
+    } catch {
+      setError("Couldn't reach the scanner. Please check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-ink/10 bg-paper-sheet p-5 shadow-sheet transition-all">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h3 className="font-display text-base font-bold text-ink">
             Auto-Fill Logbook from Photo
           </h3>
-          <p className="text-xs text-ink-soft mt-0.5">
-            Snap a handwritten physical logbook page to auto-populate your digital entries.
+          <p className="mt-0.5 text-xs text-ink-soft">
+            Snap a handwritten physical logbook page and the AI fills in your digital
+            entries for that week.
           </p>
         </div>
 
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            handleFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
         <button
           type="button"
-          onClick={handleClick}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-accent rounded-xl hover:bg-accent-dark transition-all shadow-lift shrink-0"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-xs font-semibold text-white shadow-lift transition-all hover:bg-accent-dark disabled:opacity-60"
         >
-          <span>Take Photo / Choose File</span>
+          {busy ? "Reading your page…" : "Take Photo / Choose File"}
         </button>
       </div>
 
-      {/* Clean Coming Soon Banner Without Emojis */}
-      {showComingSoon && (
-        <div className="mt-4 pt-4 border-t border-ink/10 flex items-center justify-between gap-4 animate-fade-in">
-          <div>
-            <p className="text-xs font-semibold text-accent">
-              AI Scan &amp; Auto-Fill is Coming Soon!
-            </p>
-            <p className="text-[11px] text-ink-faint mt-0.5">
-              We are fine-tuning our vision AI for handwritten logbooks. Stay tuned!
-            </p>
+      {(preview || error) && (
+        <div className="mt-4 flex items-start gap-3 border-t border-ink/10 pt-4">
+          {preview && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={preview}
+              alt="Logbook page"
+              className="h-20 w-20 shrink-0 rounded-lg object-cover"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            {busy ? (
+              <p className="flex items-center gap-2 text-xs font-medium text-accent">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                Reading the handwriting and filling your entries…
+              </p>
+            ) : error ? (
+              <p className="text-xs text-margin">{error}</p>
+            ) : null}
+            {!busy && (
+              <button
+                onClick={() => {
+                  setPreview(null);
+                  setError(null);
+                }}
+                className="mt-2 rounded-lg border border-ink/15 px-3 py-1.5 text-xs font-medium text-ink-soft transition-all hover:border-ink/30 hover:text-ink"
+              >
+                Dismiss
+              </button>
+            )}
           </div>
-
-          <button
-            onClick={() => setShowComingSoon(false)}
-            className="px-3 py-1.5 text-xs font-medium text-ink-soft hover:text-ink rounded-lg border border-ink/15 hover:border-ink/30 transition-all shrink-0"
-          >
-            Close
-          </button>
         </div>
       )}
+
+      <p className="mt-3 text-[11px] text-ink-faint">
+        Tip: lay the page flat, fill the frame, avoid shadows. Always double-check the
+        filled entries — handwriting isn&apos;t always perfect.
+      </p>
     </div>
   );
 }
