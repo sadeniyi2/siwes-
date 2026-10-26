@@ -111,8 +111,9 @@ export async function POST(req: NextRequest) {
     return new Response("Invalid message role", { status: 400 });
   }
 
-  // Bound attached images (base64) so a request can't be huge. ~8MB of base64
-  // across the whole conversation, and at most 6 images.
+  // Bound attached images (base64) so a single request stays within the
+  // platform's body-size limit. Per MESSAGE we allow plenty of images; the real
+  // guard is total bytes (serverless requests are capped around 4.5MB).
   let imageBytes = 0;
   let imageCount = 0;
   for (const m of body.messages) {
@@ -121,11 +122,12 @@ export async function POST(req: NextRequest) {
       imageCount += 1;
     }
   }
-  if (imageCount > 6 || imageBytes > 8_000_000) {
+  if (imageBytes > 4_200_000) {
     return Response.json(
       {
         reason: "too_large",
-        message: "Please attach fewer/smaller images (up to 6) and try again.",
+        message:
+          "That's a lot of image data in one go. Send a few images per message (they're added across messages).",
       },
       { status: 413 },
     );
@@ -194,17 +196,17 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // A per-student daily cap applies ONLY when using the owner's pooled key, so a
-  // few heavy users can't burn the owner's quota. Students on their own key are
-  // unlimited. Fails open if the store is unavailable.
-  if (!userKey) {
-    const limit = Number(process.env.POOL_DAILY_LIMIT || "40");
+  // Daily cap on the owner's pooled key applies ONLY to free trials, so a trial
+  // can't burn the owner's quota. Paying users (Basic/Pro) and code-granted
+  // users are UNLIMITED — they paid for it. Students on their own key too.
+  if (!userKey && claims.kind === "trial") {
+    const limit = Number(process.env.TRIAL_DAILY_LIMIT || process.env.POOL_DAILY_LIMIT || "40");
     const usage = await checkAndBumpUsage(clientId, limit);
     if (!usage.ok) {
       return Response.json(
         {
           reason: "rate_limited",
-          message: `You've reached today's limit of ${limit} messages. Please continue tomorrow — or add your own free Gemini key in the key menu for unlimited use.`,
+          message: `You've reached today's free-trial limit of ${limit} messages. Upgrade to Basic or Pro for unlimited use.`,
         },
         { status: 429 },
       );
