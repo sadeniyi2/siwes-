@@ -208,23 +208,32 @@ function Assistant({ tier }: { tier: Tier }) {
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, []);
 
-  // Compress and attach picked image files (up to 6 total).
+  // Compress and attach picked images. Paid users send unlimited messages, so
+  // the only limit here is what fits in ONE request (the platform caps body
+  // size) — once a message is full, they just send the rest in another message.
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     setAttachError(null);
-    const room = 6 - attachments.length;
-    const picked = Array.from(files).slice(0, Math.max(0, room));
-    if (picked.length === 0) {
-      setAttachError("You can attach up to 6 images.");
-      return;
-    }
+    const MAX_BYTES = 3_800_000; // keep total base64 safely under the server limit
+    const MAX_COUNT = 20;
+    let bytes = attachments.reduce((n, a) => n + a.data.length, 0);
     const added: { url: string; mimeType: string; data: string }[] = [];
-    for (const file of picked) {
+    for (const file of Array.from(files)) {
+      if (attachments.length + added.length >= MAX_COUNT) {
+        setAttachError("That's a full message of images — send the rest in another message.");
+        break;
+      }
       try {
-        const url = await compressImage(file, 1280, 0.7); // data:image/jpeg;base64,…
+        const url = await compressImage(file, 1280, 0.68); // data:image/jpeg;base64,…
         const comma = url.indexOf(",");
+        const data = url.slice(comma + 1);
+        if (bytes + data.length > MAX_BYTES) {
+          setAttachError("That's a full message of images — send the rest in another message.");
+          break;
+        }
+        bytes += data.length;
         const mimeType = url.slice(5, url.indexOf(";")) || "image/jpeg";
-        added.push({ url, mimeType, data: url.slice(comma + 1) });
+        added.push({ url, mimeType, data });
       } catch (e) {
         setAttachError(e instanceof Error ? e.message : "Couldn't add that image.");
       }

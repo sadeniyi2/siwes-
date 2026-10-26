@@ -89,10 +89,14 @@ export async function POST(req: NextRequest) {
     return Response.json(
       {
         ok: false,
-        message: "Couldn't create your account. Please try again.",
+        message: /fetch failed|ENOTFOUND|ECONNREFUSED|timeout|network|getaddrinfo/i.test(
+          created.error || "",
+        )
+          ? "Our service is temporarily unavailable (the database may be waking up). Please try again in a minute."
+          : "Couldn't create your account. Please try again.",
         detail: created.error,
       },
-      { status: 500 },
+      { status: 503 },
     );
   }
 

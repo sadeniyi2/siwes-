@@ -129,14 +129,15 @@ export async function POST(req: NextRequest) {
   const userKey = req.headers.get("x-gemini-key")?.trim();
   const clientId = req.headers.get("x-client-id")?.trim() || claims.ref || "anon";
 
-  // Per-student daily cap on pooled usage (a scan counts like a message).
-  if (!userKey) {
-    const limit = Number(process.env.POOL_DAILY_LIMIT || "40");
+  // Daily cap on pooled usage applies ONLY to free trials. Paying users are
+  // unlimited (scanning is Pro-only, so paid Pro users scan without limits).
+  if (!userKey && claims.kind === "trial") {
+    const limit = Number(process.env.TRIAL_DAILY_LIMIT || process.env.POOL_DAILY_LIMIT || "40");
     const usage = await checkAndBumpUsage(clientId, limit);
     if (!usage.ok) {
       return Response.json(
         {
-          error: `You've reached today's limit of ${limit} AI actions. Please continue tomorrow.`,
+          error: `You've reached today's free-trial limit of ${limit} AI actions. Upgrade to Pro for unlimited use.`,
         },
         { status: 429 },
       );
