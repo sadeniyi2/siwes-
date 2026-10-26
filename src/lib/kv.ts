@@ -46,6 +46,27 @@ export function kvConfigured(): boolean {
   return !!SB_URL && !!SB_KEY;
 }
 
+/** Lightweight reachability check — also registers activity so a free-tier
+ *  Supabase project doesn't pause from inactivity. */
+export async function pingStore(): Promise<{
+  configured: boolean;
+  reachable: boolean;
+  status?: number;
+  error?: string;
+}> {
+  if (!kvConfigured()) return { configured: false, reachable: false };
+  try {
+    const r = await sb(`${TABLE}?select=id&limit=1`, { method: "GET" });
+    return { configured: true, reachable: r.ok, status: r.status };
+  } catch (e) {
+    return {
+      configured: true,
+      reachable: false,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
 function sb(path: string, init: RequestInit): Promise<Response> {
   return fetch(`${SB_URL}/rest/v1/${path}`, {
     ...init,
